@@ -5,6 +5,7 @@ import App from './App.js';
 createRoot(document.getElementById('root')).render(_jsx(React.StrictMode, { children: _jsx(App, {}) }));
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register(`${window.APC_CONFIG.BASE_URL}sw.js`).catch(() => undefined);
+        const base = window.APC_CONFIG?.BASE_URL || '/APC/';
+        navigator.serviceWorker.register(`${base}sw.js`).catch(() => undefined);
     });
 }
