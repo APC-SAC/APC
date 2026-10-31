@@ -11,6 +11,11 @@ const formatNumber = (n) => new Intl.NumberFormat('es-PE').format(n);
 const formatDate = (value) => new Intl.DateTimeFormat('es-PE', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 const safeName = (text) => text.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñ0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 const qrApi = (url) => `https://api.qrserver.com/v1/create-qr-code/?size=800x800&margin=20&data=${encodeURIComponent(url)}`;
+const TACHO_OPTIONS = [
+    { value: 'tapers', label: 'Solo tapas' },
+    { value: 'tenedores', label: 'Solo tenedores' },
+    { value: 'mixto', label: 'Tapas y tenedores' },
+];
 const protocolText = [
     'Brillith es responsable de la entrega y rotación de tápers.',
     'Jonathan recibe el transportado saliente y retorna tápers y tenedores.',
@@ -19,38 +24,56 @@ const protocolText = [
     'Brillith comunica el stock final del día.',
     'Está prohibido tomar tápers para uso personal o salidas no autorizadas.',
 ];
-const GROUP_OPTIONS = [
-    { value: 'tapers', label: 'Solo tápers y tapas' },
-    { value: 'tenedores', label: 'Solo tenedores' },
-    { value: 'mixto', label: 'Mixto' },
-];
 function getQrAccess() {
     const params = new URLSearchParams(window.location.search);
     return { containerId: params.get('c') ?? '', token: params.get('k') ?? '' };
 }
 function getDefaultDescription(kind) {
     if (kind === 'caja')
-        return 'Contenedor de almacenamiento';
+        return 'Almacenamiento de tápers Rey y GyG';
     if (kind === 'tacho')
-        return 'Contenedor de rotación';
+        return 'Almacenamiento de suministros sin tápers';
     return 'Zona adicional';
 }
 function parseRpcResult(data) {
     return Array.isArray(data) ? (data[0] ?? {}) : (data ?? {});
 }
-function groupLabel(group) {
-    if (group === 'tenedores')
-        return 'Solo tenedores';
-    if (group === 'mixto')
-        return 'Mixto';
-    return 'Solo tápers';
-}
-function visibleKeysForGroup(group) {
-    if (group === 'tenedores')
+function visibleKeysForContainer(container) {
+    if (!container)
+        return [];
+    const kind = container.kind || (String(container.id || '').startsWith('tacho-') ? 'tacho' : 'caja');
+    // Las CAJAS guardan exclusivamente tápers (Rey o GyG).
+    if (kind === 'caja')
+        return ['taper_rey', 'taper_gyg'];
+    // Los TACHOS nunca guardan tápers. Pueden guardar tapas, tenedores o ambos.
+    if (kind === 'tacho') {
+        if (container.item_group === 'tenedores')
+            return ['tenedores'];
+        if (container.item_group === 'mixto')
+            return ['tapas', 'tenedores'];
+        return ['tapas'];
+    }
+    // Compatibilidad con contenedores antiguos de tipo "otro".
+    if (container.item_group === 'tenedores')
         return ['tenedores'];
-    if (group === 'mixto')
-        return ['taper_rey', 'taper_gyg', 'tapas', 'tenedores'];
-    return ['taper_rey', 'taper_gyg', 'tapas'];
+    if (container.item_group === 'mixto')
+        return ['tapas', 'tenedores'];
+    return ['taper_rey', 'taper_gyg'];
+}
+function containerContentsLabel(container) {
+    if (!container)
+        return 'Suministros';
+    const kind = container.kind || (String(container.id || '').startsWith('tacho-') ? 'tacho' : 'caja');
+    if (kind === 'caja')
+        return 'Solo tápers · Rey y GyG';
+    if (kind === 'tacho') {
+        if (container.item_group === 'tenedores')
+            return 'Solo tenedores';
+        if (container.item_group === 'mixto')
+            return 'Tapas y tenedores';
+        return 'Solo tapas';
+    }
+    return visibleKeysForContainer(container).map((key) => ITEM_DEFS.find((item) => item.key === key)?.label || key).join(' y ');
 }
 function App() {
     const qrAccess = useMemo(getQrAccess, []);
@@ -71,12 +94,12 @@ function App() {
     const [createName, setCreateName] = useState('');
     const [createKind, setCreateKind] = useState('caja');
     const [createDescription, setCreateDescription] = useState('');
-    const [createGroup, setCreateGroup] = useState('tapers');
+    const [createGroup, setCreateGroup] = useState('mixto');
     const [editingId, setEditingId] = useState(null);
     const [editName, setEditName] = useState('');
     const [editKind, setEditKind] = useState('caja');
     const [editDescription, setEditDescription] = useState('');
-    const [editGroup, setEditGroup] = useState('tapers');
+    const [editGroup, setEditGroup] = useState('mixto');
     const queueRef = useRef(readPendingQueue());
     const toastTimer = useRef(undefined);
     const notify = useCallback((next) => {
@@ -190,7 +213,7 @@ function App() {
     const activeContainerIds = useMemo(() => new Set(containers.map((container) => container.id)), [containers]);
     const selectedInfo = useMemo(() => containers.find((container) => container.id === selectedContainer) ?? null, [containers, selectedContainer]);
     const visibleItems = useMemo(() => {
-        const keys = visibleKeysForGroup(selectedInfo?.item_group);
+        const keys = visibleKeysForContainer(selectedInfo);
         return ITEM_DEFS.filter((item) => keys.includes(item.key));
     }, [selectedInfo]);
     const getQuantity = useCallback((containerId, itemKey) => {
@@ -205,10 +228,7 @@ function App() {
             const container = containers.find((entry) => entry.id === row.container_id);
             if (!container || !activeContainerIds.has(row.container_id) || row.item_key !== item.key)
                 return false;
-            const group = container.item_group || 'tapers';
-            return item.key === 'tenedores'
-                ? group === 'tenedores' || group === 'mixto'
-                : group === 'tapers' || group === 'mixto';
+            return visibleKeysForContainer(container).includes(item.key);
         })
             .reduce((sum, row) => sum + row.quantity, 0),
     })), [activeContainerIds, containers, inventory]);
@@ -220,7 +240,7 @@ function App() {
                 nextDrafts[`${container.id}:${item.key}`] = String(getQuantity(container.id, item.key));
             });
         });
-        setDrafts((old) => ({ ...nextDrafts, ...old }));
+        setDrafts(nextDrafts);
     }, [containers, getQuantity]);
     const syncPending = useCallback(async () => {
         if (!supabase || !navigator.onLine || queueRef.current.length === 0)
@@ -264,7 +284,8 @@ function App() {
     };
     const stepDraft = (containerId, itemKey, delta) => {
         const key = `${containerId}:${itemKey}`;
-        const current = Number(drafts[key] || getQuantity(containerId, itemKey) || 0);
+        const raw = drafts[key];
+        const current = Number(raw !== undefined && raw !== '' ? raw : getQuantity(containerId, itemKey));
         const next = Math.max(0, Math.min(MAX_QTY, current + delta));
         setDrafts((old) => ({ ...old, [key]: String(next) }));
     };
@@ -277,15 +298,25 @@ function App() {
         }
         const quantities = {};
         const expected = {};
+        const allowedKeys = new Set(visibleItems.map((item) => item.key));
         for (const item of ITEM_DEFS) {
-            const raw = drafts[`${selectedContainer}:${item.key}`] ?? String(getQuantity(selectedContainer, item.key));
+            const current = getQuantity(selectedContainer, item.key);
+            // Los artículos que no pertenecen a este tipo de contenedor se conservan,
+            // pero no se muestran ni se modifican desde este QR.
+            const raw = allowedKeys.has(item.key)
+                ? (drafts[`${selectedContainer}:${item.key}`] ?? String(current))
+                : String(current);
+            if (allowedKeys.has(item.key) && String(raw).trim() === '') {
+                notify({ type: 'error', text: `Completa ${item.label} o escribe 0.` });
+                return;
+            }
             const value = Number(raw);
             if (!Number.isFinite(value) || value < 0 || value > MAX_QTY) {
                 notify({ type: 'error', text: `Cantidad inválida en ${item.label}.` });
                 return;
             }
             quantities[item.key] = value;
-            expected[item.key] = getQuantity(selectedContainer, item.key);
+            expected[item.key] = current;
         }
         setSaving(true);
         const op = {
@@ -332,7 +363,7 @@ function App() {
             p_kind: createKind,
             p_name: name || null,
             p_description: description || null,
-            p_item_group: createGroup,
+            p_item_group: createKind === 'caja' ? 'tapers' : createGroup,
         });
         if (error) {
             notify({ type: 'error', text: error.message });
@@ -357,7 +388,7 @@ function App() {
         setCreateName('');
         setCreateDescription('');
         setCreateKind('caja');
-        setCreateGroup('tapers');
+        setCreateGroup('mixto');
         notify({ type: 'success', text: `${containerName} creado correctamente.` });
     };
     const openQrPreview = async (container) => {
@@ -384,14 +415,14 @@ function App() {
         setEditName(container.name);
         setEditKind((container.kind || 'caja'));
         setEditDescription(container.description || '');
-        setEditGroup((container.item_group || 'tapers'));
+        setEditGroup(container.item_group || 'mixto');
     };
     const cancelEditContainer = () => {
         setEditingId(null);
         setEditName('');
         setEditDescription('');
         setEditKind('caja');
-        setEditGroup('tapers');
+        setEditGroup('mixto');
     };
     const saveEditContainer = async () => {
         if (!editingId || !supabase)
@@ -401,7 +432,7 @@ function App() {
             p_name: safeName(editName) || null,
             p_description: safeName(editDescription) || null,
             p_kind: editKind,
-            p_item_group: editGroup,
+            p_item_group: editKind === 'caja' ? 'tapers' : editGroup,
         });
         if (error) {
             notify({ type: 'error', text: error.message });
@@ -429,16 +460,59 @@ function App() {
         notify({ type: 'success', text: `${container.name} fue eliminado.` });
     };
     const renderOverview = () => (_jsxs("div", { className: "page-stack", children: [_jsxs("section", { className: "hero-card", children: [_jsxs("div", { children: [_jsx("div", { className: "eyebrow", children: "APC Corporaci\u00F3n \u00B7 Inventario" }), _jsx("h1", { children: "Conteo simple para celular y control claro desde PC" }), _jsx("p", { children: "En m\u00F3vil lo m\u00E1s importante es escanear el QR y guardar r\u00E1pido. En PC puedes revisar el resumen, crear contenedores, editar nombres y volver a imprimir QR." }), _jsxs("div", { className: "hero-actions", children: [_jsxs("button", { className: "primary-btn", onClick: () => setPage('containers'), children: [_jsx(Boxes, { size: 16 }), " Ver contenedores"] }), _jsxs("button", { className: "secondary-btn", onClick: () => setPage('manage'), children: [_jsx(PlusSquare, { size: 16 }), " Agregar caja o tacho"] })] })] }), _jsxs("div", { className: "hero-summary-grid", children: [_jsxs("div", { className: "summary-box", children: [_jsx("span", { children: "Contenedores activos" }), _jsx("strong", { children: containers.length })] }), _jsxs("div", { className: "summary-box", children: [_jsx("span", { children: "Unidades visibles" }), _jsx("strong", { children: formatNumber(totalUnits) })] }), _jsxs("div", { className: "summary-box", children: [_jsx("span", { children: "Pendientes" }), _jsx("strong", { children: pending.length })] }), _jsxs("div", { className: "summary-box", children: [_jsx("span", { children: "Estado" }), _jsx("strong", { children: online ? 'En línea' : 'Sin internet' })] })] })] }), _jsx("section", { className: "totals-grid", children: totals.map((item) => (_jsxs("article", { className: "total-card", children: [_jsxs("div", { className: "total-card-top", children: [_jsxs("div", { children: [_jsx("small", { children: item.short }), _jsx("h3", { children: item.label })] }), _jsx("img", { src: item.image, alt: item.label, className: "item-thumb" })] }), _jsx("strong", { children: formatNumber(item.quantity) }), _jsx("span", { children: item.unit })] }, item.key))) }), _jsxs("section", { className: "desktop-grid", children: [_jsxs("div", { className: "panel-card", children: [_jsxs("div", { className: "section-head", children: [_jsx("h2", { children: "Contenedores" }), _jsx("button", { className: "text-btn", onClick: () => setPage('containers'), children: "Abrir" })] }), _jsx("div", { className: "container-grid", children: containers.map((container) => {
-                                    const total = visibleKeysForGroup(container.item_group).reduce((sum, key) => sum + getQuantity(container.id, key), 0);
-                                    return (_jsxs("button", { className: `container-card ${selectedContainer === container.id ? 'active' : ''}`, onClick: () => { setSelectedContainer(container.id); setPage('containers'); }, children: [_jsxs("div", { className: "container-card-top", children: [_jsx("span", { children: container.kind === 'tacho' ? 'Tacho' : container.kind === 'otro' ? 'Otro' : 'Caja' }), _jsx("strong", { children: container.name })] }), _jsx("p", { children: container.description }), _jsx("div", { className: "container-meta-row", children: _jsx("span", { className: "mini-chip", children: groupLabel(container.item_group) }) }), _jsxs("div", { className: "container-card-total", children: [formatNumber(total), " ", _jsx("small", { children: "unidades" })] })] }, container.id));
+                                    const total = visibleKeysForContainer(container).reduce((sum, key) => sum + getQuantity(container.id, key), 0);
+                                    return (_jsxs("button", { className: `container-card ${selectedContainer === container.id ? 'active' : ''}`, onClick: () => { setSelectedContainer(container.id); setPage('containers'); }, children: [_jsxs("div", { className: "container-card-top", children: [_jsx("span", { children: container.kind === 'tacho' ? 'Tacho' : container.kind === 'otro' ? 'Otro' : 'Caja' }), _jsx("strong", { children: container.name })] }), _jsx("p", { children: container.description }), _jsx("div", { className: "container-meta-row", children: _jsx("span", { className: "mini-chip", children: containerContentsLabel(container) }) }), _jsxs("div", { className: "container-card-total", children: [formatNumber(total), " ", _jsx("small", { children: "unidades" })] })] }, container.id));
                                 }) })] }), _jsxs("div", { className: "panel-card", children: [_jsxs("div", { className: "section-head", children: [_jsx("h2", { children: "\u00DAltimos movimientos" }), _jsx("button", { className: "text-btn", onClick: () => setPage('history'), children: "Ver todo" })] }), _jsxs("div", { className: "history-mini-list", children: [movements.slice(0, 8).map((move) => (_jsxs("div", { className: "history-mini-row", children: [_jsxs("div", { children: [_jsx("strong", { children: containerName(move.container_id, containers) }), _jsx("span", { children: itemLabel(move.item_key) })] }), _jsxs("div", { className: `delta-pill ${move.delta >= 0 ? 'plus' : 'minus'}`, children: [move.delta >= 0 ? '+' : '', move.delta] })] }, move.id))), movements.length === 0 && _jsx("p", { className: "empty-note", children: "A\u00FAn no hay movimientos registrados." })] })] })] })] }));
-    const renderContainerEditor = () => (_jsxs("div", { className: "page-stack", children: [_jsx("div", { className: "section-head", children: _jsxs("div", { children: [_jsx("div", { className: "eyebrow", children: "Control por contenedor" }), _jsx("h2", { children: selectedInfo?.name || 'Contenedor' })] }) }), !qrOnlyMode && (_jsx("div", { className: "container-switch-row", children: containers.map((container) => (_jsx("button", { className: `container-pill ${selectedContainer === container.id ? 'active' : ''}`, onClick: () => setSelectedContainer(container.id), children: container.name }, container.id))) })), _jsxs("section", { className: "panel-card editor-card mobile-optimized-editor", children: [_jsxs("div", { className: "editor-head", children: [_jsxs("div", { children: [_jsx("div", { className: "eyebrow", children: "Registro r\u00E1pido" }), _jsx("h3", { children: selectedInfo?.name }), _jsxs("p", { children: [selectedInfo?.description, ". ", canEdit ? 'Puedes guardar cambios desde este QR.' : 'Abre este contenedor desde su QR para poder guardar.'] }), _jsx("div", { className: "container-meta-row", children: _jsx("span", { className: "mini-chip", children: groupLabel(selectedInfo?.item_group) }) })] }), _jsxs("div", { className: "editor-total", children: [_jsx("span", { children: "Total actual" }), _jsx("strong", { children: formatNumber(selectedTotal) })] })] }), _jsx("div", { className: "editor-grid", children: visibleItems.map((item) => {
+    const renderContainerEditor = () => (_jsxs("div", { className: "page-stack", children: [_jsx("div", { className: "section-head", children: _jsxs("div", { children: [_jsx("div", { className: "eyebrow", children: "Control por contenedor" }), _jsx("h2", { children: selectedInfo?.name || 'Contenedor' })] }) }), !qrOnlyMode && (_jsx("div", { className: "container-switch-row", children: containers.map((container) => (_jsx("button", { className: `container-pill ${selectedContainer === container.id ? 'active' : ''}`, onClick: () => setSelectedContainer(container.id), children: container.name }, container.id))) })), _jsxs("section", { className: "panel-card editor-card mobile-optimized-editor", children: [_jsxs("div", { className: "editor-head", children: [_jsxs("div", { children: [_jsx("div", { className: "eyebrow", children: "Registro r\u00E1pido" }), _jsx("h3", { children: selectedInfo?.name }), _jsxs("p", { children: [selectedInfo?.description, ". ", canEdit ? 'Cuenta las unidades físicas y registra el total encontrado.' : 'Vista de consulta. Escanea el QR del contenedor para guardar cambios.'] }), _jsx("div", { className: "container-meta-row", children: _jsx("span", { className: "mini-chip", children: containerContentsLabel(selectedInfo) }) })] }), _jsxs("div", { className: "editor-total", children: [_jsx("span", { children: "Total actual" }), _jsx("strong", { children: formatNumber(selectedTotal) })] })] }), _jsx("div", { className: "editor-grid", children: visibleItems.map((item) => {
                             const key = `${selectedContainer}:${item.key}`;
-                            return (_jsxs("article", { className: "count-card", children: [_jsxs("div", { className: "count-card-top", children: [_jsx("img", { src: item.image, alt: item.label, className: "count-image" }), _jsxs("div", { children: [_jsx("small", { children: item.short }), _jsx("h4", { children: item.label }), _jsxs("span", { children: ["Actual: ", formatNumber(getQuantity(selectedContainer, item.key))] })] })] }), _jsxs("div", { className: "count-controls", children: [_jsx("input", { inputMode: "numeric", pattern: "[0-9]*", value: drafts[key] ?? '', onChange: (e) => updateDraft(selectedContainer, item.key, e.target.value), placeholder: "0" }), _jsxs("button", { type: "button", onClick: () => stepDraft(selectedContainer, item.key, -5), children: [_jsx(Minus, { size: 14 }), "5"] }), _jsxs("button", { type: "button", onClick: () => stepDraft(selectedContainer, item.key, -1), children: [_jsx(Minus, { size: 14 }), "1"] }), _jsxs("button", { type: "button", onClick: () => stepDraft(selectedContainer, item.key, 1), children: [_jsx(Plus, { size: 14 }), "1"] }), _jsxs("button", { type: "button", onClick: () => stepDraft(selectedContainer, item.key, 5), children: [_jsx(Plus, { size: 14 }), "5"] })] })] }, item.key));
+                            return (_jsxs("article", { className: "count-card", children: [_jsxs("div", { className: "count-card-top", children: [_jsx("img", { src: item.image, alt: item.label, className: "count-image" }), _jsxs("div", { children: [_jsx("small", { children: item.short }), _jsx("h4", { children: item.label }), _jsxs("span", { children: ["Stock registrado: ", formatNumber(getQuantity(selectedContainer, item.key))] })] })] }), _jsxs("div", { className: "count-entry", children: [_jsx("label", { className: "count-entry-label", htmlFor: `quantity-${selectedContainer}-${item.key}`, children: "Cantidad contada" }), _jsxs("div", { className: "count-controls", children: [_jsx("input", { id: `quantity-${selectedContainer}-${item.key}`, type: "text", inputMode: "numeric", pattern: "[0-9]*", maxLength: 6, "aria-label": `Cantidad contada de ${item.label}`, value: drafts[key] ?? '', onChange: (e) => updateDraft(selectedContainer, item.key, e.target.value), placeholder: "Escribe el total" }), _jsxs("button", { type: "button", className: "step-btn decrease", "aria-label": "Restar cinco", onClick: () => stepDraft(selectedContainer, item.key, -5), children: [_jsx(Minus, { size: 14 }), " −5"] }), _jsxs("button", { type: "button", className: "step-btn decrease", "aria-label": "Restar uno", onClick: () => stepDraft(selectedContainer, item.key, -1), children: [_jsx(Minus, { size: 14 }), " −1"] }), _jsxs("button", { type: "button", className: "step-btn increase", "aria-label": "Sumar uno", onClick: () => stepDraft(selectedContainer, item.key, 1), children: [_jsx(Plus, { size: 14 }), " +1"] }), _jsxs("button", { type: "button", className: "step-btn increase", "aria-label": "Sumar cinco", onClick: () => stepDraft(selectedContainer, item.key, 5), children: [_jsx(Plus, { size: 14 }), " +5"] })] }), _jsx("p", { className: "count-hint", children: "Escribe el total que contaste o ajústalo con los botones." })] })] }, item.key));
                         }) }), _jsxs("div", { className: "editor-actions", children: [_jsxs("button", { className: "primary-btn large", disabled: saving, onClick: saveContainer, children: [_jsx(CheckCircle2, { size: 18 }), saving ? 'Guardando...' : `Guardar conteo de ${selectedInfo?.name || ''}`] }), _jsx("div", { className: `inline-badge ${canEdit ? 'ok' : 'warn'}`, children: canEdit ? 'QR válido para guardar' : 'Modo solo lectura' })] })] })] }));
     const renderHistory = () => (_jsxs("div", { className: "page-stack", children: [_jsx("div", { className: "section-head", children: _jsxs("div", { children: [_jsx("div", { className: "eyebrow", children: "Historial" }), _jsx("h2", { children: "Movimientos recientes" })] }) }), _jsx("section", { className: "panel-card", children: _jsxs("div", { className: "history-list", children: [movements.map((move) => (_jsxs("article", { className: "history-row", children: [_jsxs("div", { className: "history-row-main", children: [_jsx("strong", { children: containerName(move.container_id, containers) }), _jsxs("span", { children: [itemLabel(move.item_key), " \u00B7 ", formatDate(move.created_at)] })] }), _jsxs("div", { className: `delta-pill ${move.delta >= 0 ? 'plus' : 'minus'}`, children: [move.delta >= 0 ? '+' : '', move.delta] }), _jsxs("div", { className: "history-row-side", children: [formatNumber(move.quantity_before), " \u2192 ", formatNumber(move.quantity_after)] })] }, move.id))), movements.length === 0 && _jsx("p", { className: "empty-note", children: "No hay movimientos para mostrar." })] }) })] }));
     const renderProtocol = () => (_jsx("div", { className: "page-stack", children: _jsxs("section", { className: "panel-card", children: [_jsx("div", { className: "section-head", children: _jsxs("div", { children: [_jsx("div", { className: "eyebrow", children: "Instructivo administrativo" }), _jsx("h2", { children: "Procedimiento vigente" })] }) }), _jsx("div", { className: "protocol-list", children: protocolText.map((text, index) => (_jsxs("div", { className: "protocol-item", children: [_jsx("span", { children: index + 1 }), _jsx("p", { children: text })] }, index))) })] }) }));
-    const renderManage = () => (_jsxs("div", { className: "page-stack", children: [_jsxs("section", { className: "panel-card manage-grid", children: [_jsxs("div", { children: [_jsx("div", { className: "section-head", children: _jsxs("div", { children: [_jsx("div", { className: "eyebrow", children: "Configuraci\u00F3n" }), _jsx("h2", { children: "Agregar caja o tacho" })] }) }), _jsxs("div", { className: "manage-form", children: [_jsxs("label", { children: [_jsx("span", { children: "Tipo" }), _jsxs("select", { value: createKind, onChange: (e) => { setCreateKind(e.target.value); if (e.target.value === 'caja') setCreateGroup('tapers'); }, children: [_jsx("option", { value: "caja", children: "Caja" }), _jsx("option", { value: "tacho", children: "Tacho" }), _jsx("option", { value: "otro", children: "Otro" })] })] }), _jsxs("label", { children: [_jsx("span", { children: "Qu\u00E9 va a guardar" }), _jsx("select", { value: createGroup, disabled: createKind === 'caja', onChange: (e) => setCreateGroup(e.target.value), children: GROUP_OPTIONS.map((option) => _jsx("option", { value: option.value, children: option.label }, option.value)) })] }), _jsxs("label", { children: [_jsx("span", { children: "Nombre (opcional)" }), _jsx("input", { value: createName, onChange: (e) => setCreateName(e.target.value), placeholder: "Ejemplo: Caja 04" })] }), _jsxs("label", { children: [_jsx("span", { children: "Descripci\u00F3n" }), _jsx("input", { value: createDescription, onChange: (e) => setCreateDescription(e.target.value), placeholder: getDefaultDescription(createKind) })] }), _jsxs("button", { className: "primary-btn", onClick: createContainer, children: [_jsx(PlusSquare, { size: 16 }), " Crear contenedor y generar QR"] })] })] }), _jsxs("div", { children: [_jsx("div", { className: "section-head", children: _jsxs("div", { children: [_jsx("div", { className: "eyebrow", children: "Impresi\u00F3n" }), _jsx("h2", { children: "QR decorado" })] }) }), qrPreview ? _jsx(QrPrintCard, { preview: qrPreview }) : _jsx("p", { className: "empty-note", children: "Cuando crees una nueva caja o tacho, aqu\u00ED aparecer\u00E1 su QR decorado listo para imprimir." })] })] }), _jsxs("section", { className: "panel-card", children: [_jsx("div", { className: "section-head", children: _jsx("div", { children: _jsx("h2", { children: "Contenedores actuales" }) }) }), _jsx("div", { className: "container-grid compact", children: containers.map((container) => (_jsxs("div", { className: "container-card static", children: [_jsxs("div", { className: "container-card-top", children: [_jsx("span", { children: container.kind || 'caja' }), _jsx("strong", { children: container.name })] }), _jsx("p", { children: container.description }), _jsx("div", { className: "container-meta-row", children: _jsx("span", { className: "mini-chip", children: groupLabel(container.item_group) }) }), _jsxs("div", { className: "container-actions", children: [_jsxs("button", { className: "secondary-btn", onClick: () => openQrPreview(container), children: [_jsx(QrCode, { size: 15 }), " Ver QR"] }), _jsxs("button", { className: "secondary-btn", onClick: () => startEditContainer(container), children: [_jsx(Edit3, { size: 15 }), " Editar"] }), _jsxs("button", { className: "secondary-btn danger", onClick: () => deleteContainer(container), children: [_jsx(Trash2, { size: 15 }), " Eliminar"] })] }), editingId === container.id && (_jsxs("div", { className: "edit-panel", children: [_jsxs("label", { children: [_jsx("span", { children: "Tipo" }), _jsxs("select", { value: editKind, onChange: (e) => { setEditKind(e.target.value); if (e.target.value === 'caja') setEditGroup('tapers'); }, children: [_jsx("option", { value: "caja", children: "Caja" }), _jsx("option", { value: "tacho", children: "Tacho" }), _jsx("option", { value: "otro", children: "Otro" })] })] }), _jsxs("label", { children: [_jsx("span", { children: "Qu\u00E9 guarda" }), _jsx("select", { value: editGroup, disabled: editKind === 'caja', onChange: (e) => setEditGroup(e.target.value), children: GROUP_OPTIONS.map((option) => _jsx("option", { value: option.value, children: option.label }, option.value)) })] }), _jsxs("label", { children: [_jsx("span", { children: "Nombre" }), _jsx("input", { value: editName, onChange: (e) => setEditName(e.target.value) })] }), _jsxs("label", { children: [_jsx("span", { children: "Descripci\u00F3n" }), _jsx("input", { value: editDescription, onChange: (e) => setEditDescription(e.target.value) })] }), _jsxs("div", { className: "edit-actions", children: [_jsxs("button", { className: "primary-btn", onClick: saveEditContainer, children: [_jsx(Save, { size: 15 }), " Guardar cambios"] }), _jsxs("button", { className: "secondary-btn", onClick: cancelEditContainer, children: [_jsx(X, { size: 15 }), " Cancelar"] })] })] }))] }, container.id))) })] })] }));
+    const renderManage = () => (_jsxs("div", { className: "page-stack", children: [
+        _jsxs("section", { className: "panel-card manage-grid", children: [
+            _jsxs("div", { children: [
+                _jsxs("div", { className: "section-head", children: [_jsxs("div", { children: [_jsx("div", { className: "eyebrow", children: "Configuración" }), _jsx("h2", { children: "Agregar contenedor" })] })] }),
+                _jsxs("div", { className: "manage-form", children: [
+                    _jsxs("label", { children: [_jsx("span", { children: "¿Qué vas a agregar?" }), _jsxs("select", { value: createKind, onChange: (e) => { const nextKind = e.target.value; setCreateKind(nextKind); if (nextKind === 'tacho' && createGroup === 'tapers') setCreateGroup('mixto'); }, children: [_jsx("option", { value: "caja", children: "Caja de tápers" }), _jsx("option", { value: "tacho", children: "Tacho (sin tápers)" })] })] }),
+                    _jsxs("div", { className: "container-rule-card", children: [
+                        _jsx("span", { className: "rule-title", children: "Suministros permitidos" }),
+                        _jsx("strong", { children: createKind === 'caja' ? "Tápers Rey y GyG" : (TACHO_OPTIONS.find((option) => option.value === createGroup)?.label || "Tapas y tenedores") }),
+                        _jsx("p", { children: createKind === 'caja' ? "Esta caja registra únicamente tápers de marca Rey o GyG. No incluye tapas ni tenedores." : "Los tachos no admiten tápers. Puedes elegir tapas, tenedores o ambos." })
+                    ] }),
+                    createKind === 'tacho' ? _jsxs("label", { children: [_jsx("span", { children: "¿Qué guardará este tacho?" }), _jsxs("select", { value: createGroup, onChange: (e) => setCreateGroup(e.target.value), children: TACHO_OPTIONS.map((option) => _jsx("option", { value: option.value, children: option.label }, option.value)) })] }) : null,
+                    _jsxs("label", { children: [_jsx("span", { children: "Nombre (opcional)" }), _jsx("input", { value: createName, onChange: (e) => setCreateName(e.target.value), placeholder: createKind === 'caja' ? "Ejemplo: Caja 04" : "Ejemplo: Tacho 02" })] }),
+                    _jsxs("label", { children: [_jsx("span", { children: "Descripción (opcional)" }), _jsx("input", { value: createDescription, onChange: (e) => setCreateDescription(e.target.value), placeholder: getDefaultDescription(createKind) })] }),
+                    _jsxs("button", { className: "primary-btn", onClick: createContainer, children: [_jsx(PlusSquare, { size: 16 }), " Crear y generar QR"] })
+                ] })
+            ] }),
+            _jsxs("div", { children: [
+                _jsxs("div", { className: "section-head", children: [_jsxs("div", { children: [_jsx("div", { className: "eyebrow", children: "Impresión" }), _jsx("h2", { children: "QR decorado" })] })] }),
+                qrPreview ? _jsx(QrPrintCard, { preview: qrPreview }) : _jsx("p", { className: "empty-note", children: "Al crear un contenedor, aquí aparecerá su QR decorado. También puedes abrir el QR de los contenedores existentes." })
+            ] })
+        ] }),
+        _jsxs("section", { className: "panel-card", children: [
+            _jsx("div", { className: "section-head", children: _jsx("div", { children: _jsx("h2", { children: "Contenedores actuales" }) }) }),
+            _jsx("div", { className: "container-grid compact", children: containers.map((container) => (_jsxs("div", { className: "container-card static", children: [
+                _jsxs("div", { className: "container-card-top", children: [_jsx("span", { children: container.kind === 'tacho' ? 'TACHO' : container.kind === 'otro' ? 'OTRO' : 'CAJA' }), _jsx("strong", { children: container.name })] }),
+                _jsx("p", { children: container.description }),
+                _jsx("div", { className: "container-meta-row", children: _jsx("span", { className: "mini-chip", children: containerContentsLabel(container) }) }),
+                _jsxs("div", { className: "container-actions", children: [
+                    _jsxs("button", { className: "secondary-btn", onClick: () => openQrPreview(container), children: [_jsx(QrCode, { size: 15 }), " Ver QR"] }),
+                    _jsxs("button", { className: "secondary-btn", onClick: () => startEditContainer(container), children: [_jsx(Edit3, { size: 15 }), " Editar"] }),
+                    _jsxs("button", { className: "secondary-btn danger", onClick: () => deleteContainer(container), children: [_jsx(Trash2, { size: 15 }), " Eliminar"] })
+                ] }),
+                editingId === container.id && (_jsxs("div", { className: "edit-panel", children: [
+                    _jsxs("label", { children: [_jsx("span", { children: "Tipo de contenedor" }), _jsxs("select", { value: editKind, onChange: (e) => { const nextKind = e.target.value; setEditKind(nextKind); if (nextKind === 'tacho' && editGroup === 'tapers') setEditGroup('mixto'); }, children: [_jsx("option", { value: "caja", children: "Caja de tápers" }), _jsx("option", { value: "tacho", children: "Tacho (sin tápers)" }), editKind === 'otro' ? _jsx("option", { value: "otro", children: "Otro (existente)" }) : null] })] }),
+                    _jsxs("div", { className: "container-rule-card compact-rule", children: [_jsx("span", { className: "rule-title", children: "Suministros que se mostrarán" }), _jsx("strong", { children: editKind === 'caja' ? "Tápers Rey y GyG" : (TACHO_OPTIONS.find((option) => option.value === editGroup)?.label || "Tapas y tenedores") }), _jsx("p", { children: editKind === 'caja' ? "No se mostrarán ni modificarán tapas o tenedores desde esta caja." : "Este tacho no mostrará ni modificará tápers." })] }),
+                    editKind === 'tacho' ? _jsxs("label", { children: [_jsx("span", { children: "¿Qué guardará este tacho?" }), _jsxs("select", { value: editGroup, onChange: (e) => setEditGroup(e.target.value), children: TACHO_OPTIONS.map((option) => _jsx("option", { value: option.value, children: option.label }, option.value)) })] }) : null,
+                    _jsxs("label", { children: [_jsx("span", { children: "Nombre" }), _jsx("input", { value: editName, onChange: (e) => setEditName(e.target.value) })] }),
+                    _jsxs("label", { children: [_jsx("span", { children: "Descripción" }), _jsx("input", { value: editDescription, onChange: (e) => setEditDescription(e.target.value) })] }),
+                    _jsxs("div", { className: "edit-actions", children: [_jsxs("button", { className: "primary-btn", onClick: saveEditContainer, children: [_jsx(Save, { size: 15 }), " Guardar cambios"] }), _jsxs("button", { className: "secondary-btn", onClick: cancelEditContainer, children: [_jsx(X, { size: 15 }), " Cancelar"] })] })
+                ] }))
+            ] }, container.id))) })
+        ] })
+    ] }));
     return (_jsxs("div", { className: `app-shell ${qrOnlyMode ? 'qr-only-shell' : ''}`, children: [_jsxs("aside", { className: "sidebar", children: [_jsxs("div", { className: "brand-block", children: [_jsx("img", { src: `${BASE}apc-logo.png`, alt: "APC" }), _jsxs("div", { children: [_jsx("strong", { children: "APC Inventario" }), _jsx("span", { children: "Control de suministros" })] })] }), _jsxs("nav", { className: "side-nav", children: [_jsxs("button", { className: page === 'overview' ? 'active' : '', onClick: () => setPage('overview'), children: [_jsx(Home, { size: 18 }), " Resumen"] }), _jsxs("button", { className: page === 'containers' ? 'active' : '', onClick: () => setPage('containers'), children: [_jsx(Boxes, { size: 18 }), " Contenedores"] }), _jsxs("button", { className: page === 'history' ? 'active' : '', onClick: () => setPage('history'), children: [_jsx(History, { size: 18 }), " Movimientos"] }), _jsxs("button", { className: page === 'manage' ? 'active' : '', onClick: () => setPage('manage'), children: [_jsx(QrCode, { size: 18 }), " Cajas y QR"] }), _jsxs("button", { className: page === 'protocol' ? 'active' : '', onClick: () => setPage('protocol'), children: [_jsx(ClipboardList, { size: 18 }), " Protocolo"] })] }), _jsxs("div", { className: "sidebar-help", children: [_jsx(Info, { size: 15 }), _jsx("p", { children: qrOnlyMode ? 'Este enlace QR solo debe servir para este contenedor.' : 'Para guardar cambios, siempre escanea el QR del contenedor. Para ver el resumen, puedes entrar también desde PC.' })] })] }), _jsxs("main", { className: "main-area", children: [_jsxs("header", { className: "topbar", children: [_jsxs("div", { children: [_jsx("div", { className: "eyebrow", children: "APC Corporaci\u00F3n" }), _jsx("h1", { children: page === 'overview' ? 'Inventario de suministros' : page === 'containers' ? (qrOnlyMode ? 'Conteo del contenedor' : 'Conteo por contenedor') : page === 'history' ? 'Movimientos' : page === 'manage' ? 'Cajas y QR' : 'Protocolo administrativo' })] }), _jsxs("div", { className: "topbar-actions", children: [_jsx("button", { className: "secondary-icon-btn", onClick: () => initializeData(), title: "Actualizar", children: _jsx(RefreshCw, { size: 17 }) }), _jsxs("div", { className: `status-chip ${online ? 'online' : 'offline'}`, children: [online ? _jsx(Wifi, { size: 15 }) : _jsx(WifiOff, { size: 15 }), online ? 'En línea' : 'Sin internet'] }), syncing && _jsx("div", { className: "inline-badge ok", children: "Sincronizando\u2026" })] })] }), loading ? _jsx("div", { className: "panel-card", children: _jsx("p", { className: "empty-note", children: "Cargando datos..." }) }) : (_jsxs(_Fragment, { children: [page === 'overview' && renderOverview(), page === 'containers' && renderContainerEditor(), page === 'history' && renderHistory(), page === 'protocol' && renderProtocol(), page === 'manage' && renderManage()] }))] }), toast && _jsx("div", { className: `toast ${toast.type}`, children: toast.text }), qrPreview && _jsx(QrModal, { preview: qrPreview, onClose: () => setQrPreview(null) })] }));
 }
 function containerName(id, containers) {

@@ -268,3 +268,41 @@ input,select{min-width:0}
 /* En un acceso por QR solo se muestra el conteo del contenedor escaneado. */
 .qr-only-shell .side-nav,
 .qr-only-shell .sidebar-help { display: none !important; }
+
+/* APC V5 — conteo más claro y reglas visibles por tipo de contenedor */
+.count-entry{display:flex;flex-direction:column;gap:7px;min-width:0}
+.count-entry-label{font-size:12px;font-weight:800;letter-spacing:.25px;color:#5e7281}
+.count-hint{margin:0;color:#7b8c97;font-size:11px;line-height:1.35}
+.count-controls{grid-template-columns:minmax(150px,1fr) repeat(4,minmax(54px,68px));gap:8px}
+.count-controls input{height:52px;font-size:25px;border:1.5px solid #d4e0e7;background:#fff}
+.count-controls .step-btn{height:52px;border:1px solid #d9e4e9;border-radius:13px;background:#fff;color:var(--navy);font-size:15px;font-weight:850;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px;transition:background .15s,border-color .15s,transform .15s}
+.count-controls .step-btn:hover{background:#f1f7f8;border-color:#a9c7d3}
+.count-controls .step-btn:active{transform:scale(.97)}
+.count-controls .step-btn.decrease{color:#9b4c3a}
+.count-controls .step-btn.increase{color:#147b59}
+.container-rule-card{display:flex;flex-direction:column;gap:5px;padding:14px 15px;border:1px solid #d9e9e2;border-radius:15px;background:#f4f9f6}
+.container-rule-card .rule-title{font-size:11px;font-weight:850;letter-spacing:.8px;text-transform:uppercase;color:#628073}
+.container-rule-card strong{font-size:16px;color:var(--navy)}
+.container-rule-card p{margin:0;font-size:12px;line-height:1.45;color:#657b72}
+.container-rule-card.compact-rule{margin:2px 0 4px;padding:11px 12px}
+.container-rule-card.compact-rule strong{font-size:14px}
+
+@media (max-width:860px){
+  .qr-only-shell .page-stack>.section-head{display:none}
+  .count-controls{grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+  .count-controls input{grid-column:1/-1;height:52px;font-size:25px}
+  .count-controls .step-btn{height:44px;font-size:14px;border-radius:11px}
+  .count-controls .step-btn svg{display:none}
+  .count-entry-label{font-size:12px}
+  .count-hint{font-size:10px}
+  .container-rule-card{padding:12px 13px}
+  .container-rule-card strong{font-size:15px}
+}
+@media (max-width:520px){
+  .count-controls{gap:6px}
+  .count-controls .step-btn{height:43px;font-size:13px}
+  .count-controls input{height:50px;font-size:24px}
+  .count-card{gap:9px}
+  .count-card-top{gap:10px}
+  .count-image{width:62px;height:62px}
+}
