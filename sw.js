@@ -1,5 +1,5 @@
-const APP_CACHE = 'apc-inventario-app-v3';
-const CDN_CACHE = 'apc-inventario-cdn-v3';
+const APP_CACHE = 'apc-inventario-app-v4';
+const CDN_CACHE = 'apc-inventario-cdn-v4';
 const SHELL = [
   '/APC/', '/APC/index.html', '/APC/apc-logo.png', '/APC/manifest.webmanifest',
   '/APC/assets/styles.css', '/APC/assets/main.js', '/APC/assets/App.js',

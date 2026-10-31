@@ -155,3 +155,116 @@ input,select{min-width:0}
   .qr-topline img{width:58px}
   .qr-sub{font-size:12px}
 }
+
+
+/* APC V4 — ajustes de uso real en teléfono */
+@media (max-width: 860px) {
+  html, body, #root { width: 100%; max-width: 100%; overflow-x: hidden; }
+  .app-shell { grid-template-columns: minmax(0, 1fr); width: 100%; overflow-x: clip; }
+  .sidebar { padding: 10px 14px 8px; gap: 8px; }
+  .brand-block { gap: 10px; padding-bottom: 9px; }
+  .brand-block img { width: 42px; }
+  .brand-block strong { font-size: 18px; }
+  .brand-block span { font-size: 11px; }
+  .side-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
+    gap: 6px;
+    padding: 0;
+  }
+  .side-nav button {
+    min-width: 0;
+    justify-content: center;
+    flex-direction: column;
+    gap: 4px;
+    white-space: normal;
+    text-align: center;
+    font-size: 11px;
+    line-height: 1.15;
+    padding: 8px 4px;
+    border-radius: 11px;
+  }
+  .sidebar-help { display: none; }
+  .main-area { width: 100%; min-width: 0; padding: 10px 10px 22px; }
+  .topbar { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .topbar h1 { font-size: 22px; line-height: 1.12; }
+  .topbar-actions { justify-content: flex-end; gap: 6px; flex-wrap: nowrap; }
+  .status-chip { padding: 7px 9px; font-size: 11px; gap: 5px; white-space: nowrap; }
+  .secondary-icon-btn { padding: 8px 10px; }
+  .page-stack { gap: 13px; }
+  .hero-card { padding: 16px; gap: 14px; }
+  .hero-card h1 { font-size: 26px; line-height: 1.08; }
+  .hero-card p { font-size: 13px; }
+  .hero-actions { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 14px; }
+  .hero-summary-grid { gap: 8px; }
+  .summary-box { padding: 11px; border-radius: 13px; }
+  .summary-box strong { font-size: 20px; }
+  .totals-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .total-card { padding: 11px; border-radius: 15px; }
+  .total-card-top { gap: 7px; margin-bottom: 8px; }
+  .total-card h3 { font-size: 15px; }
+  .total-card strong { font-size: 27px; }
+  .item-thumb { width: 48px; height: 48px; border-radius: 11px; object-fit: contain; }
+  .panel-card { padding: 14px; border-radius: 17px; }
+  .section-head { margin-bottom: 10px; }
+  .section-head h2 { font-size: 19px; }
+  .container-grid, .container-grid.compact { grid-template-columns: 1fr; gap: 9px; }
+  .container-card { padding: 13px; border-radius: 15px; gap: 8px; }
+  .container-card-top strong { font-size: 17px; }
+  .container-card p { min-height: 0; }
+  .container-switch-row { overflow-x: auto; flex-wrap: nowrap; max-width: 100%; padding-bottom: 3px; }
+  .container-pill { flex: 0 0 auto; padding: 9px 12px; font-size: 13px; }
+  .editor-card { padding: 13px; }
+  .editor-head { flex-direction: column; align-items: stretch; gap: 9px; margin-bottom: 12px; }
+  .editor-head h3 { font-size: 21px; margin: 4px 0; }
+  .editor-head p { font-size: 13px; line-height: 1.4; }
+  .editor-total {
+    width: 100%;
+    min-width: 0;
+    padding: 9px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    text-align: left;
+    border-radius: 13px;
+  }
+  .editor-total span { margin: 0; }
+  .editor-total strong { font-size: 25px; }
+  .editor-grid { grid-template-columns: 1fr; gap: 9px; }
+  .count-card { padding: 11px; border-radius: 15px; gap: 10px; }
+  .count-card-top { align-items: center; gap: 10px; }
+  .count-image { width: 58px; height: 58px; border-radius: 12px; object-fit: contain; }
+  .count-card-top h4 { font-size: 17px; margin: 2px 0; }
+  .count-card-top span { font-size: 12px; }
+  .count-controls { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .count-controls input { grid-column: 1 / -1; height: 46px; font-size: 25px; border-radius: 11px; }
+  .count-controls button { height: 39px; font-size: 12px; border-radius: 10px; }
+  .count-controls button svg { display: none; }
+  .editor-actions { flex-direction: column; align-items: stretch; gap: 8px; margin-top: 12px; }
+  .primary-btn.large { width: 100%; padding: 12px; }
+  .qr-only-shell .side-nav,
+  .qr-only-shell .sidebar-help { display: none !important; }
+  .qr-only-shell .sidebar { padding: 9px 14px 7px; }
+  .qr-only-shell .brand-block { padding-bottom: 0; border-bottom: 0; }
+  .qr-only-shell .main-area { padding-top: 7px; }
+}
+
+@media (max-width: 520px) {
+  .topbar h1 { font-size: 20px; }
+  .topbar-actions .status-chip { font-size: 10px; padding: 6px 8px; }
+  .hero-card h1 { font-size: 24px; }
+  .summary-box span { font-size: 10px; }
+  .summary-box strong { font-size: 18px; }
+  .total-card small { font-size: 9px; }
+  .total-card h3 { font-size: 14px; }
+  .total-card strong { font-size: 25px; }
+  .container-actions { gap: 7px; }
+  .container-actions button { flex: 1 1 auto; font-size: 12px; padding: 9px 8px; }
+  .toast { left: 10px; right: 10px; bottom: 10px; max-width: none; font-size: 13px; }
+  .qr-frame { max-width: 100%; }
+}
+
+/* En un acceso por QR solo se muestra el conteo del contenedor escaneado. */
+.qr-only-shell .side-nav,
+.qr-only-shell .sidebar-help { display: none !important; }
