@@ -1,5 +1,5 @@
-const APP_CACHE = 'apc-inventario-app-v2';
-const CDN_CACHE = 'apc-inventario-cdn-v2';
+const APP_CACHE = 'apc-inventario-app-v3';
+const CDN_CACHE = 'apc-inventario-cdn-v3';
 const SHELL = [
   '/APC/', '/APC/index.html', '/APC/apc-logo.png', '/APC/manifest.webmanifest',
   '/APC/assets/styles.css', '/APC/assets/main.js', '/APC/assets/App.js',
@@ -15,7 +15,7 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
-  if (url.hostname === 'wsbbbqapyktvfllajnak.supabase.co') return;
+  if (url.hostname.endsWith('supabase.co')) return;
   const isApp = url.origin === self.location.origin;
   const isModuleCdn = url.hostname === 'esm.sh' || url.hostname.endsWith('.esm.sh');
   if (!isApp && !isModuleCdn) return;

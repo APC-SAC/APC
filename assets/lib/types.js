@@ -1,12 +1,34 @@
-export const CONTAINERS = [
-    { id: 'caja-01', name: 'Caja 01', short: '01', detail: 'Almacenamiento principal' },
-    { id: 'caja-02', name: 'Caja 02', short: '02', detail: 'Almacenamiento secundario' },
-    { id: 'caja-03', name: 'Caja 03', short: '03', detail: 'Almacenamiento secundario' },
-    { id: 'tacho-01', name: 'Tacho 01', short: 'T1', detail: 'Contenedor de rotación' },
-];
-export const ITEMS = [
-    { key: 'taper_rey', label: 'Tápers Rey', short: 'Rey', unit: 'unidades' },
-    { key: 'taper_gyg', label: 'Tápers GyG', short: 'GyG', unit: 'unidades' },
-    { key: 'tapas', label: 'Tapas', short: 'Tapas', unit: 'unidades' },
-    { key: 'tenedores', label: 'Tenedores', short: 'Tenedores', unit: 'unidades' },
+export const ITEM_DEFS = [
+    {
+        key: 'taper_rey',
+        label: 'Tápers Rey',
+        short: 'Rey',
+        unit: 'unidades',
+        image: 'https://www.plasticosrey.com/wp-content/uploads/2023/05/1563468038_2dca2a147e4758df6523c78be8b65869.22714-1.jpeg',
+        accent: '#1a7f5a',
+    },
+    {
+        key: 'taper_gyg',
+        label: 'Tápers GyG',
+        short: 'GyG',
+        unit: 'unidades',
+        image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRTmxjd8ING676s8rUTmxjQJe_pm5mqWhdSIXfzN1Nk254jaxosI79RhFsd&s=10',
+        accent: '#d97706',
+    },
+    {
+        key: 'tapas',
+        label: 'Tapas',
+        short: 'Tapas',
+        unit: 'unidades',
+        image: '',
+        accent: '#375e97',
+    },
+    {
+        key: 'tenedores',
+        label: 'Tenedores',
+        short: 'Tenedores',
+        unit: 'unidades',
+        image: '',
+        accent: '#6b7280',
+    },
 ];
