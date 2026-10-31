@@ -20,7 +20,7 @@ export const ITEM_DEFS = [
         label: 'Tapas',
         short: 'Tapas',
         unit: 'unidades',
-        image: '',
+        image: 'https://www.mallplast.pe/image/cache/catalog/mall/Basa/Cocina/taper-gyg-fr-1-1-l-reconectando-c-3-divisiones-600x315w.jpg',
         accent: '#375e97',
     },
     {
@@ -28,7 +28,7 @@ export const ITEM_DEFS = [
         label: 'Tenedores',
         short: 'Tenedores',
         unit: 'unidades',
-        image: '',
+        image: 'https://record.com.pe/cdn/shop/files/Tenedores_4-1.jpg?v=1753504444&width=1946',
         accent: '#6b7280',
     },
 ];
