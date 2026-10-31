@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#102b43" />
+    <meta name="description" content="APC Inventario — Control de suministros de comedor" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="icon" type="image/png" href="./apc-logo.png" />
+    <link rel="apple-touch-icon" href="./apc-logo.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./assets/styles.css" />
+    <title>APC Inventario</title>
+    <script>
+      window.APC_CONFIG = {
+        BASE_URL: '/APC/',
+        VITE_SUPABASE_URL: 'https://wsbbbqapyktvfllajnak.supabase.co',
+        VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_6LpoPKbZdXzIOU-aw5LGRQ_tnL_ujk_'
+      };
+    </script>
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/react@18.3.1?target=es2022",
+          "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime?target=es2022",
+          "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?external=react&target=es2022",
+          "lucide-react": "https://esm.sh/lucide-react@0.468.0?external=react&target=es2022",
+          "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.57.0?target=es2022"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./assets/main.js"></script>
+  </body>
+</html>

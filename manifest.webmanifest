@@ -1,0 +1,13 @@
+{
+  "name": "APC Inventario",
+  "short_name": "APC Inventario",
+  "description": "Control de suministros de comedor APC",
+  "start_url": "/APC/",
+  "scope": "/APC/",
+  "display": "standalone",
+  "background_color": "#f3f6f8",
+  "theme_color": "#102b43",
+  "icons": [
+    { "src": "/APC/apc-logo.png", "sizes": "any", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
