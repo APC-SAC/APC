@@ -1,8 +1,8 @@
-const APP_CACHE = 'apc-inventario-app-v8';
-const CDN_CACHE = 'apc-inventario-cdn-v8';
+const APP_CACHE = 'apc-inventario-app-v9';
+const CDN_CACHE = 'apc-inventario-cdn-v9';
 const SHELL = [
   '/APC/', '/APC/index.html', '/APC/apc-logo.png', '/APC/manifest.webmanifest',
-  '/APC/assets/styles.css', '/APC/assets/main.js', '/APC/assets/images/tapas-rey.jpg'
+  '/APC/assets/styles.css?v=9', '/APC/assets/main.js?v=9', '/APC/assets/images/tapas-rey.jpg'
 ];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(APP_CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));

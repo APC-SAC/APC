@@ -1,0 +1,50 @@
+APC INVENTARIO V9 — WEB + APK ANDROID
+====================================
+
+CAMBIOS WEB
+-----------
+- Desde Inicio > Contenedores, al abrir un recipiente por primera vez en ese navegador, la web crea un acceso propio y permite editar cantidades sin escanear primero.
+- En el editor aparece "Ver / imprimir QR".
+- En "Recipientes y QR" se puede generar otro QR para un recipiente o generar QR adicionales para todos los recipientes activos e imprimirlos en hojas.
+- Los QR anteriores no se invalidan: la base conserva varios accesos válidos por recipiente.
+- No se agregan cuentas de usuario ni contraseñas para el personal.
+
+PASO 1 — SUPABASE (UNA SOLA VEZ)
+--------------------------------
+Antes de publicar V9, abre Supabase > SQL Editor y ejecuta el archivo:
+APC_INVENTARIO_V9_TOKENS_MULTIPLES.sql
+
+El script crea una tabla de accesos QR adicionales y actualiza la validación de guardado. No borra existencias, movimientos, recipientes ni QR antiguos.
+Ejecuta este SQL en el mismo proyecto Supabase que aparece en el index.html de la web APC (xdiakzwxuoiiddglnhsj).
+
+PASO 2 — PUBLICAR LA WEB
+------------------------
+1. Descomprime APC_INVENTARIO_V9_GITHUB_PAGES.zip.
+2. Sube TODO su contenido a la raíz del repositorio APC-SAC/APC, reemplazando los archivos web anteriores.
+3. Espera a que GitHub Pages publique los cambios.
+4. Abre la web y prueba abrir un recipiente desde Inicio. Debe dejarte escribir y guardar sin escanear.
+5. En Recipientes y QR puedes generar e imprimir QR adicionales para todos.
+
+PASO 3 — GENERAR LA APK
+-----------------------
+El proyecto Android está en el archivo APC_INVENTARIO_ANDROID_V1_SOURCE.zip.
+Para generar el APK automáticamente desde GitHub:
+1. Descomprime el ZIP Android.
+2. Sube las carpetas android/ y .github/workflows/ a la raíz de APC-SAC/APC. No borres los archivos de la web.
+3. Haz commit. GitHub ejecutará el workflow "Build APC Inventario APK".
+4. En GitHub > Actions, abre la ejecución terminada y descarga el artefacto APC-Inventario-APK.
+5. Descomprime el artefacto: dentro estará app-debug.apk. Instálalo en el teléfono Android.
+
+FUNCIONAMIENTO DE LA APK
+------------------------
+- Abre APC Inventario dentro de la aplicación.
+- Pulsa el botón verde "Escanear QR" que está arriba.
+- La cámara se abre dentro de APC. No manda el QR a Google ni pregunta qué navegador usar.
+- Cuando reconoce un QR de un recipiente APC, abre ese recipiente directamente dentro de la aplicación.
+- Se necesita internet para consultar y guardar datos en Supabase.
+
+SEGURIDAD Y USO
+---------------
+No hay cuentas individuales. Los QR son llaves de escritura del recipiente. Como la web no usa inicio de sesión, cualquier persona que pueda entrar a la web pública podría activar un acceso nuevo y editar inventario. Si más adelante quieres limitar la edición web solo a administración, se puede agregar una clave maestra sin crear usuarios individuales.
+
+La APK V1 solo implementa inventario. El lector QR está separado en QrRouter.java para poder incorporar después asistencia u otros módulos, sin mezclarlos con el inventario actual.
