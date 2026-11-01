@@ -1,6 +1,6 @@
 {
   "web_version": "11.0.0",
-  "android_version": "1.1.0",
+  "android_version": "1.2.0",
   "apk_url": "https://github.com/APC-SAC/APC/releases/latest/download/APC-Inventario.apk",
-  "release_notes": "Menú móvil único; actualizaciones en Más; acceso a QR directo y botón de escaneo mejorado."
+  "release_notes": "APK 1.2.0: botón QR principal y actualización desde Más."
 }
