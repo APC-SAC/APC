@@ -244,3 +244,33 @@ button:focus-visible,input:focus-visible{outline:3px solid rgba(21,150,107,.25);
  .big-report-actions .button{font-size:12px}.editor-top-total{font-size:21px}
 }
 @media(max-width:860px){.mobile-topbar .menu-trigger{display:none}.mobile-topbar{min-height:66px}}
+
+/* V11: navegación móvil única y pantalla Más de uso directo */
+.more-screen{max-width:760px;margin:0 auto;padding-bottom:24px}
+.more-hero{display:flex;gap:16px;align-items:center;background:linear-gradient(125deg,#ebf7f2,#f5fafc);border:1px solid #d7eae1;border-radius:22px;padding:24px 22px}
+.more-symbol{width:64px;height:64px;flex:0 0 64px;display:grid;place-items:center;border-radius:19px;background:#14976e;color:white;font-size:34px;box-shadow:0 9px 20px rgba(11,141,91,.14)}
+.more-hero h2{font-size:27px;color:#163c61;line-height:1.15;margin:5px 0}
+.more-hero p{color:#607a89;margin:3px 0;font-size:14px}
+.more-list{display:grid;gap:11px}
+.more-action{display:flex;align-items:center;gap:15px;width:100%;min-height:83px;border:1px solid #dfe8ed;border-radius:20px;background:white;padding:14px 18px;text-align:left;color:#153b60;box-shadow:0 4px 15px rgba(15,55,80,.045)}
+.more-action.featured{border:2px solid #a2dac0;background:#f0fbf5}
+.more-action:active{transform:scale(.986);background:#f5fafc}
+.more-action-icon{display:grid;place-items:center;flex:0 0 55px;width:55px;height:55px;background:#eaf1f6;border-radius:16px;color:#17507e;font-size:30px;font-weight:850}
+.more-action.featured .more-action-icon{background:#15986d;color:white}
+.more-action-text{display:grid;gap:5px;flex:1;min-width:0}
+.more-action-text strong{font-size:17px;line-height:1.2}
+.more-action-text small{font-size:12px;line-height:1.35;color:#6a8190}
+.more-action-arrow{font-size:30px;color:#7d99aa;line-height:1}
+.more-version{text-align:center;font-size:12px;color:#698394;padding:12px}
+@media(max-width:860px){
+  .mobile-topbar .menu-trigger{display:none !important}
+  .mobile-bottom-nav button{min-height:62px}
+  .mobile-bottom-nav button span{font-size:24px}
+  .mobile-bottom-nav button small{font-size:12px}
+  .more-hero{padding:18px 15px}
+  .more-action{min-height:82px;padding:12px 13px}
+}
+@media(max-width:390px){
+  .more-action-icon{width:48px;height:48px;flex-basis:48px;font-size:26px}
+  .more-action-text strong{font-size:16px}
+}

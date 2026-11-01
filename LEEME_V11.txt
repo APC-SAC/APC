@@ -1,0 +1,6 @@
+APC Inventario WEB V11
+Subir el CONTENIDO de este ZIP directamente a la raíz del repositorio APC-SAC/APC.
+No hay SQL nuevo. Se mantienen QR, cantidades e historial.
+Cambios: sin menú superior de tres rayas; navegación móvil inferior Inicio/Contar/Historial/Más; en Más hay Buscar actualización.
+El archivo version.json anuncia WEB 11.0.0, pero conserva Android 1.1.0 hasta que publiques la APK 1.2.0 en GitHub Releases.
+Ver GUIA_PUBLICAR_Y_ACTUALIZAR_APC_V11.txt de la entrega completa.

@@ -15,7 +15,7 @@ const CACHE_KEY = 'apc_inventory_stock_v7';
 const CONTAINERS_CACHE_KEY = 'apc_inventory_containers_v7';
 const QUEUE_KEY = 'apc_inventory_pending_v7';
 const MAX_QTY = 100000;
-const WEB_VERSION = '10.0.0';
+const WEB_VERSION = '11.0.0';
 const UPDATE_URL = `${BASE}version.json`;
 
 const DB_KEYS = ['taper_rey', 'taper_gyg', 'tapas', 'tenedores'];
@@ -435,6 +435,19 @@ function renderMovements() {
 function renderProtocol() {
   return `<div class="page-stack"><section class="section-block"><div class="section-title-row"><div><span class="eyebrow">INSTRUCTIVO</span><h2>Procedimiento administrativo</h2><p>Consulta rápida de las responsabilidades registradas.</p></div></div><div class="protocol-grid">${PROTOCOL.map((line, index) => `<article class="protocol-card"><span>${index + 1}</span><p>${escapeHtml(line)}</p></article>`).join('')}</div></section>${renderVersionSection()}</div>`;
 }
+function renderMorePage() {
+  const inAndroid = Boolean(window.APCAndroid?.checkForUpdates);
+  return `<div class="page-stack more-screen">
+    <section class="more-hero"><div class="more-symbol">✦</div><div><span class="eyebrow">TU APLICACIÓN APC</span><h2>Más opciones</h2><p>Todo lo que necesitas, en un solo lugar.</p></div></section>
+    <section class="more-list" aria-label="Opciones de APC">
+      <button class="more-action featured" data-action="check-updates"><span class="more-action-icon">↻</span><span class="more-action-text"><strong>Buscar actualización</strong><small>${inAndroid ? 'Comprueba si hay una nueva APK en GitHub' : 'Comprueba si hay una nueva versión de la web'}</small></span><span class="more-action-arrow">›</span></button>
+      <button class="more-action" data-action="navigate" data-page="manage"><span class="more-action-icon">▣</span><span class="more-action-text"><strong>Recipientes y códigos QR</strong><small>Crear, editar, imprimir o consultar QR</small></span><span class="more-action-arrow">›</span></button>
+      <button class="more-action" data-action="navigate" data-page="protocol"><span class="more-action-icon">▤</span><span class="more-action-text"><strong>Protocolo administrativo</strong><small>Instrucciones del comedor</small></span><span class="more-action-arrow">›</span></button>
+      <button class="more-action" data-action="navigate" data-page="movements"><span class="more-action-icon">◷</span><span class="more-action-text"><strong>Historial de conteos</strong><small>Movimientos e informes del inventario</small></span><span class="more-action-arrow">›</span></button>
+    </section>
+    <div class="more-version"><span class="status-dot ${state.online ? 'online' : 'offline'}"></span> ${state.online ? 'Con conexión' : 'Sin conexión'} · ${inAndroid ? 'Aplicación Android' : 'Web'} · Versión web ${WEB_VERSION}</div>
+  </div>`;
+}
 function renderDrawer() {
   if (!state.menuOpen) return '';
   const links = [
@@ -448,17 +461,17 @@ function renderDrawer() {
 }
 function renderMobileNav() {
   if (state.qrMode) return '';
-  return `<nav class="mobile-bottom-nav" aria-label="Navegación principal"><button class="${state.page === 'home' ? 'active' : ''}" data-action="navigate" data-page="home"><span>⌂</span><small>Inicio</small></button><button class="${state.page === 'containers' ? 'active' : ''}" data-action="navigate" data-page="containers"><span>▦</span><small>Contar</small></button><button class="${state.page === 'movements' ? 'active' : ''}" data-action="navigate" data-page="movements"><span>↻</span><small>Historial</small></button><button class="${state.menuOpen ? 'active' : ''}" data-action="open-menu"><span>☰</span><small>Más</small></button></nav>`;
+  return `<nav class="mobile-bottom-nav" aria-label="Navegación principal"><button class="${state.page === 'home' ? 'active' : ''}" data-action="navigate" data-page="home"><span>⌂</span><small>Inicio</small></button><button class="${state.page === 'containers' ? 'active' : ''}" data-action="navigate" data-page="containers"><span>▦</span><small>Contar</small></button><button class="${state.page === 'movements' ? 'active' : ''}" data-action="navigate" data-page="movements"><span>↻</span><small>Historial</small></button><button class="${state.page === 'more' ? 'active' : ''}" data-action="navigate" data-page="more"><span>•••</span><small>Más</small></button></nav>`;
 }
 function render() {
-  const title = ({ home: 'Resumen', containers: state.qrMode ? 'Conteo del recipiente' : 'Contenedores', manage: 'Recipientes y QR', movements: 'Movimientos', protocol: 'Protocolo' })[state.page] || 'APC Inventario';
+  const title = ({ home: 'Resumen', containers: state.qrMode ? 'Conteo del recipiente' : 'Contenedores', manage: 'Recipientes y QR', movements: 'Movimientos', protocol: 'Protocolo', more: 'Más opciones' })[state.page] || 'APC Inventario';
   ROOT.innerHTML = `<div class="app-shell ${state.qrMode ? 'qr-mode' : ''}">
     <aside class="desktop-sidebar"><button class="brand-lockup brand-home" data-action="home"><img src="${BASE}apc-logo.png" alt="APC"><span><strong>APC Inventario</strong><small>Control de suministros</small></span></button><nav class="desktop-nav"><button data-action="navigate" data-page="home" class="${state.page === 'home' ? 'active' : ''}"><span>⌂</span>Resumen</button><button data-action="navigate" data-page="containers" class="${state.page === 'containers' ? 'active' : ''}"><span>▦</span>Contenedores</button><button data-action="navigate" data-page="movements" class="${state.page === 'movements' ? 'active' : ''}"><span>↻</span>Movimientos</button><button data-action="navigate" data-page="manage" class="${state.page === 'manage' ? 'active' : ''}"><span>▣</span>Recipientes y QR</button><button data-action="navigate" data-page="protocol" class="${state.page === 'protocol' ? 'active' : ''}"><span>▤</span>Protocolo</button></nav><button class="button secondary sidebar-update" data-action="check-updates">↻ Buscar actualización</button><div class="sidebar-tip"><strong>Uso rápido</strong><p>Escanea el QR del recipiente, escribe las cantidades y guarda el conteo.</p></div></aside>
-    <div class="mobile-topbar"><button class="brand-lockup brand-home" data-action="home"><img src="${BASE}apc-logo.png" alt="APC"><span><strong>APC Inventario</strong><small>Control de suministros</small></span></button><div class="mobile-header-actions"><span class="connection-pill ${state.online ? 'online' : 'offline'}">● ${state.online ? 'En línea' : 'Sin internet'}</span>${!state.qrMode ? '<button class="icon-button menu-trigger" data-action="open-menu" aria-label="Abrir menú">☰</button>' : '<button class="icon-button" data-action="home" aria-label="Volver al inicio">⌂</button>'}</div></div>
+    <div class="mobile-topbar"><button class="brand-lockup brand-home" data-action="home"><img src="${BASE}apc-logo.png" alt="APC"><span><strong>APC Inventario</strong><small>Control de suministros</small></span></button><div class="mobile-header-actions"><span class="connection-pill ${state.online ? 'online' : 'offline'}">● ${state.online ? 'En línea' : 'Sin internet'}</span>${state.qrMode ? '<button class="icon-button" data-action="home" aria-label="Volver al inicio">⌂</button>' : ''}</div></div>
     <main class="main-area"><header class="page-header"><div><span class="eyebrow">APC CORPORACIÓN</span><h1>${title}</h1></div><div class="header-actions"><span class="connection-pill ${state.online ? 'online' : 'offline'}">● ${state.online ? 'En línea' : 'Sin internet'}</span><button class="icon-button" data-action="refresh" title="Actualizar inventario">↻</button></div></header>
-      ${state.loading ? '<div class="loading-card"><span class="spinner"></span><strong>Cargando inventario…</strong></div>' : state.page === 'home' ? renderHome() : state.page === 'containers' ? renderContainersPage() : state.page === 'manage' ? renderManage() : state.page === 'movements' ? renderMovements() : renderProtocol()}
+      ${state.loading ? '<div class="loading-card"><span class="spinner"></span><strong>Cargando inventario…</strong></div>' : state.page === 'home' ? renderHome() : state.page === 'containers' ? renderContainersPage() : state.page === 'manage' ? renderManage() : state.page === 'movements' ? renderMovements() : state.page === 'more' ? renderMorePage() : renderProtocol()}
     </main>
-    ${renderMobileNav()}${renderDrawer()}${renderUpdateNotice()}${renderQrModal()}${renderQrHelpModal()}${renderClearHistoryModal()}${state.toast ? `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}
+    ${renderMobileNav()}${renderUpdateNotice()}${renderQrModal()}${renderQrHelpModal()}${renderClearHistoryModal()}${state.toast ? `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}
   </div>`;
 }
 function renderQrModal() {
