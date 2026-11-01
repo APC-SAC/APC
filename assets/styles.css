@@ -276,3 +276,48 @@ button:focus-visible,input:focus-visible{outline:3px solid rgba(21,150,107,.25);
 }
 
 .container-tile-icon img,.group-symbol img{width:82%;height:82%;object-fit:contain;display:block}.container-tile-icon span,.group-symbol span{line-height:1}
+
+/* V13 · consulta por suministro, inventario de solo lectura y teclado móvil estable */
+.summary-clickable{position:relative;appearance:none;width:100%;font-family:inherit;text-align:left;cursor:pointer;border:1px solid var(--line);transition:box-shadow .15s,border-color .15s,transform .15s}
+.summary-clickable:hover,.summary-clickable:focus-visible{border-color:#64aa8b;box-shadow:0 7px 22px rgba(20,58,99,.10);outline:none}
+.summary-clickable:active{transform:scale(.99)}
+.summary-clickable .summary-chevron{margin-left:auto;font-size:22px;color:var(--green-dark);font-weight:900;align-self:center}
+.readonly-container{padding:16px;border:1px solid #dfe8ed;border-radius:18px;background:#fff;box-shadow:0 4px 15px rgba(13,54,90,.035);min-width:0}
+.readonly-container-head{display:flex;align-items:center;gap:12px}
+.readonly-container-head>div:nth-child(2){flex:1;min-width:0}
+.readonly-container-head strong{display:block;color:var(--navy);font-size:17px}
+.readonly-container-head small{display:block;margin-top:3px;color:#728796;font-size:11px;line-height:1.4}
+.readonly-container-head>b{font-size:21px;color:var(--green-dark)}
+.readonly-lines{margin:13px 0 10px;border-top:1px solid #e7edf1}
+.readonly-line{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid #edf1f4;color:#566e7f;font-size:13px}
+.readonly-line strong{color:var(--navy);font-size:16px}
+.readonly-note{font-size:10px;color:#81939e;font-weight:750}
+.product-detail-modal{width:min(100%,510px);padding:22px}
+.detail-product-head{display:flex;align-items:center;gap:17px;padding:16px;border-radius:19px;background:#f6fafb;border:1px solid #e3edf1}
+.detail-product-head .product-image{width:118px;height:112px;flex:0 0 118px;background:#fff;border-radius:15px}
+.detail-product-head strong{display:block;color:var(--navy);line-height:1.35;font-size:17px}
+.detail-product-head small{display:block;color:#738795;font-size:12px;margin:8px 0 3px}
+.detail-product-head b{font-size:24px;color:var(--green-dark)}
+.detail-section-title{margin:20px 0 10px;font-size:16px;color:var(--navy)}
+.detail-place-list{display:grid;gap:8px;max-height:40dvh;overflow-y:auto}
+.detail-place-row{display:flex;gap:12px;align-items:center;padding:12px;border-radius:13px;border:1px solid #e0eaef}
+.detail-mini-icon{flex:0 0 39px;width:39px;height:39px;display:grid;place-items:center;background:#f4f7f9;border-radius:11px}
+.detail-mini-icon img{width:92%;height:92%;object-fit:contain}
+.detail-place-row>div{flex:1;min-width:0}
+.detail-place-row strong{font-size:13px;display:block;color:var(--navy)}
+.detail-place-row small{font-size:10px;display:block;color:#85949d}
+.detail-place-row>b{font-size:20px;color:var(--navy)}
+.detail-close-button{display:block;margin-top:17px;width:100%}
+/* Guardar deja de ser flotante: permanece después de los campos. */
+.save-bar{position:static;bottom:auto;z-index:auto;backdrop-filter:none;background:#f5faf8;box-shadow:none}
+.clear-history-modal .form-field>input{font-size:23px;letter-spacing:5px;text-align:center}
+@media(max-width:600px){
+  .summary-clickable{min-height:110px;padding:12px;gap:9px}.summary-clickable .summary-chevron{font-size:19px}
+  .summary-clickable small{font-size:9px;line-height:1.25}
+  .readonly-container{padding:14px;border-radius:17px}
+  .product-modal-backdrop,.modal-backdrop:has(.clear-history-modal){align-items:flex-start;display:flex;justify-content:center;overflow-y:auto;overscroll-behavior:contain;padding:14px 12px max(20px,env(safe-area-inset-bottom))}
+  .product-detail-modal,.clear-history-modal{flex:0 0 auto;margin:0 auto;max-height:none;overflow:visible;border-radius:20px;padding:16px}
+  .detail-product-head{gap:10px;padding:11px}.detail-product-head .product-image{flex-basis:96px;width:96px;height:96px}.detail-product-head strong{font-size:14px}.detail-product-head b{font-size:20px}
+  .detail-place-list{max-height:none}
+  .save-bar{bottom:auto;margin:17px 0 0;padding:13px;border:1px solid #d7e9dc}
+}

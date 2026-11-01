@@ -1,0 +1,23 @@
+APC INVENTARIO WEB V13 · Actualización de la web
+
+1. Descomprime APC_WEB_V13.zip.
+2. En tu repositorio público https://github.com/APC-SAC/APC sube el CONTENIDO de esta carpeta a la raíz (index.html, sw.js, assets/, etc.) y confirma los reemplazos.
+3. Espera a que GitHub Pages publique los archivos y vuelve a cargar https://apc-sac.github.io/APC/.
+4. Desde la APK que ya tienes instalada, abre de nuevo la aplicación (usa el botón de actualizar/recargar si sigue viendo la versión anterior).
+
+NO debes ejecutar SQL, ni compilar Android Studio ni cambiar APK para las mejoras web de esta entrega.
+
+NOVEDADES:
+- Toca cualquier producto del Resumen de suministros para consultar por nombre, marca, capacidad y distribución en recipientes.
+- Las tarjetas de recipientes en Inicio son solo lectura: muestran cantidades, sin botones para editar.
+- El botón Atrás del navegador/Android vuelve a la lista desde el editor. Se agregó navegación con historial del navegador.
+- Para borrar historial se solicita solo la clave numérica; sigue validándose mediante Supabase.
+- Conteo numérico: al enfocar selecciona el valor existente y vacío se interpreta como 0.
+- Guardar conteo queda en su sitio, sin flotar ni cubrir el teclado.
+- Se reduce la reconstrucción de la pantalla mientras se está editando un campo.
+- Se actualizó el service worker y la versión web a 13.0.0.
+
+IMPORTANTE: la eliminación necesita que esté instalada en tu Supabase la función apci_clear_all_movements con la clave 2026. Si informa "Clave incorrecta" o "Función no encontrada", la parte del servidor debe revisarse aparte. No reestablezcas o borres tablas indiscriminadamente.
+La clave 2026 es débil; no debe usarse para proteger información confidencial o acciones críticas sin autenticación.
+
+NOTA DE VERIFICACIÓN: se comprobó el flujo con datos simulados en un navegador móvil de pruebas. No se hicieron cambios ni pruebas de escritura contra la base de datos real.

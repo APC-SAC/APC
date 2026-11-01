@@ -15,16 +15,16 @@ const CACHE_KEY = 'apc_inventory_stock_v7';
 const CONTAINERS_CACHE_KEY = 'apc_inventory_containers_v7';
 const QUEUE_KEY = 'apc_inventory_pending_v7';
 const MAX_QTY = 100000;
-const WEB_VERSION = '12.0.0';
+const WEB_VERSION = '13.0.0';
 const UPDATE_URL = `${BASE}version.json`;
 
 const DB_KEYS = ['taper_rey', 'taper_gyg', 'tapas', 'tenedores'];
 const ITEM_DEFS = [
-  { key: 'taper_rey', dbKey: 'taper_rey', brand: 'REY', label: 'Tápers Rey', short: 'Rey', image: 'https://www.plasticosrey.com/wp-content/uploads/2023/05/1563468038_2dca2a147e4758df6523c78be8b65869.22714-1.jpeg', alt: 'Táper de la marca Rey', group: 'taper' },
-  { key: 'taper_gyg', dbKey: 'taper_gyg', brand: 'GyG', label: 'Tápers GyG', short: 'GyG', image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRTmxjd8ING676s8rUTmxjQJe_pm5mqWhdSIXfzN1Nk254jaxosI79RhFsd&s=10', alt: 'Táper de la marca GyG', group: 'taper' },
-  { key: 'tapas_rey', dbKey: 'tapas', brand: 'REY', label: 'Tapas Rey', short: 'Rey', image: `${BASE}assets/images/tapas-rey.jpg`, alt: 'Tapa Rey con borde azul', group: 'tapa' },
-  { key: 'tapas_gyg', dbKey: 'tapas', brand: 'GyG', label: 'Tapas GyG', short: 'GyG', image: 'https://www.mallplast.pe/image/cache/catalog/mall/Basa/Cocina/taper-gyg-fr-1-1-l-reconectando-c-3-divisiones-600x315w.jpg', alt: 'Tapa de la marca GyG', group: 'tapa' },
-  { key: 'tenedores', dbKey: 'tenedores', brand: 'APC', label: 'Tenedores', short: 'Tenedores', image: 'https://record.com.pe/cdn/shop/files/Tenedores_4-1.jpg?v=1753504444&width=1946', alt: 'Tenedores', group: 'otros' }
+  { key: 'taper_rey', dbKey: 'taper_rey', brand: 'REY', detailLabel: 'Táper de la marca REY · 1.1 L · Base', label: 'Tápers Rey', short: 'Rey', image: 'https://www.plasticosrey.com/wp-content/uploads/2023/05/1563468038_2dca2a147e4758df6523c78be8b65869.22714-1.jpeg', alt: 'Táper de la marca Rey', group: 'taper' },
+  { key: 'taper_gyg', dbKey: 'taper_gyg', brand: 'GyG', detailLabel: 'Táper de la marca GyG · 1 L · Base', label: 'Tápers GyG', short: 'GyG', image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRTmxjd8ING676s8rUTmxjQJe_pm5mqWhdSIXfzN1Nk254jaxosI79RhFsd&s=10', alt: 'Táper de la marca GyG', group: 'taper' },
+  { key: 'tapas_rey', dbKey: 'tapas', brand: 'REY', detailLabel: 'Tapa del táper REY · 1.1 L · Base', label: 'Tapas Rey', short: 'Rey', image: `${BASE}assets/images/tapas-rey.jpg`, alt: 'Tapa Rey con borde azul', group: 'tapa' },
+  { key: 'tapas_gyg', dbKey: 'tapas', brand: 'GyG', detailLabel: 'Tapa del táper GyG · 1 L · Base', label: 'Tapas GyG', short: 'GyG', image: 'https://www.mallplast.pe/image/cache/catalog/mall/Basa/Cocina/taper-gyg-fr-1-1-l-reconectando-c-3-divisiones-600x315w.jpg', alt: 'Tapa de la marca GyG', group: 'tapa' },
+  { key: 'tenedores', dbKey: 'tenedores', brand: 'APC', detailLabel: 'Tenedores', label: 'Tenedores', short: 'Tenedores', image: 'https://record.com.pe/cdn/shop/files/Tenedores_4-1.jpg?v=1753504444&width=1946', alt: 'Tenedores', group: 'otros' }
 ];
 const DEFAULT_CREATE_KEYS = ['taper_rey', 'taper_gyg'];
 const PROTOCOL = [
@@ -72,8 +72,8 @@ const state = {
   qrHelpContainerId: '',
   clearHistoryOpen: false,
   clearHistoryPin: '',
-  clearHistoryConfirm: '',
   clearingHistory: false,
+  productDetailKey: '',
   toast: null,
   saving: false
 };
@@ -285,9 +285,21 @@ function renderContainerCard(container, actionLabel = 'Contar') {
     <div class="container-tile-actions"><button class="button primary small" data-action="open-container" data-id="${escapeHtml(container.id)}">${actionLabel}</button>${token ? '<span class="access-state ready">Edición lista en este navegador</span>' : '<span class="access-state">Se activa al abrir</span>'}</div>
   </article>`;
 }
+function renderReadOnlyContainerCard(container) {
+  const keys = visibleKeys(container);
+  return `<article class="readonly-container"><div class="readonly-container-head"><div class="container-tile-icon">${renderContainerCategoryIcon(container)}</div><div><strong>${escapeHtml(container.name)}</strong><small>${escapeHtml(parseMeta(container).description || contentsLabel(container))}</small></div><b>${formatNumber(containerTotal(container))}</b></div><div class="readonly-lines">${keys.map(key => `<div class="readonly-line"><span>${escapeHtml(getItem(key)?.label || key)}</span><strong>${formatNumber(logicalQuantity(container, key))}</strong></div>`).join('') || '<p>Sin suministros asignados</p>'}</div><span class="readonly-note">Solo lectura · no modifica el inventario</span></article>`;
+}
+function renderProductDetailModal() {
+  if (!state.productDetailKey) return '';
+  const item = getItem(state.productDetailKey);
+  if (!item) return '';
+  const places = state.containers.map(container => ({container, amount: visibleKeys(container).includes(item.key) ? logicalQuantity(container,item.key) : 0})).filter(row => row.amount > 0);
+  const total = places.reduce((sum,row)=>sum+row.amount,0);
+  return `<div class="modal-backdrop product-modal-backdrop" data-action="close-product-detail"><section class="qr-modal product-detail-modal" role="dialog" aria-modal="true" aria-label="Distribución de ${escapeHtml(item.label)}"><div class="modal-heading"><div><span class="eyebrow">DETALLE DEL INVENTARIO</span><h2>¿Dónde están guardados?</h2></div><button class="icon-button" data-action="close-product-detail" aria-label="Cerrar detalle">×</button></div><div class="detail-product-head">${itemImage(item)}<div><strong>${escapeHtml(item.detailLabel || item.label)}</strong><small>Existencias registradas</small><b>${formatNumber(total)} unidades</b></div></div><h3 class="detail-section-title">Distribución por recipientes</h3><div class="detail-place-list">${places.length ? places.sort((a,b)=>b.amount-a.amount).map(({container, amount})=>`<div class="detail-place-row"><span class="detail-mini-icon">${renderContainerCategoryIcon(container)}</span><div><strong>${escapeHtml(container.name)}</strong><small>${escapeHtml(categoryOf(container))}</small></div><b>${formatNumber(amount)}</b></div>`).join('') : '<div class="empty-state">No hay unidades de este suministro registradas en los recipientes activos.</div>'}</div><button class="button primary detail-close-button" data-action="close-product-detail">Entendido</button></section></div>`;
+}
 function renderTotalsCard(label, value, imageKey, tone = '') {
   const item = getItem(imageKey);
-  return `<article class="summary-product ${tone}">${itemImage(item, true)}<div><span>${escapeHtml(label)}</span><strong>${formatNumber(value)}</strong><small>unidades</small></div></article>`;
+  return `<button type="button" class="summary-product summary-clickable ${tone}" data-action="show-product-detail" data-key="${escapeHtml(imageKey)}" aria-label="Ver distribución de ${escapeHtml(label)}">${itemImage(item, true)}<div><span>${escapeHtml(label)}</span><strong>${formatNumber(value)}</strong><small>unidades · toca para ver dónde están</small></div><span class="summary-chevron" aria-hidden="true">›</span></button>`;
 }
 function compareVersions(a, b) {
   const ax = String(a).replace(/[^0-9.]/g, '').split('.').map(Number);
@@ -383,8 +395,8 @@ function renderHome() {
         ${renderTotalsCard('Tenedores', totals.tenedores, 'tenedores')}
       </div>
     </section>
-    <section class="section-block"><div class="section-title-row"><div><span class="eyebrow">ACCESO RÁPIDO</span><h2>Tus recipientes</h2><p>Toca “Abrir conteo” para registrar cantidades desde esta pantalla.</p></div><button class="button secondary small" data-action="go-containers">Ver todos</button></div>
-      <div class="container-list">${state.containers.length ? renderGroupedContainers(state.containers, container => renderContainerCard(container, 'Abrir conteo')) : '<div class="empty-state">Todavía no has creado recipientes. Crea el primero para empezar.</div>'}</div>
+    <section class="section-block"><div class="section-title-row"><div><span class="eyebrow">ACCESO RÁPIDO</span><h2>Tus recipientes</h2><p>Consulta las cantidades de cada recipiente. Para modificar, entra a Contar.</p></div><button class="button secondary small" data-action="go-containers">Ver todos</button></div>
+      <div class="container-list">${state.containers.length ? renderGroupedContainers(state.containers, renderReadOnlyContainerCard) : '<div class="empty-state">Todavía no has creado recipientes. Crea el primero para empezar.</div>'}</div>
     </section>
     <section class="section-block recent-section"><div class="section-title-row"><div><span class="eyebrow">ACTIVIDAD</span><h2>Últimos movimientos</h2></div><button class="text-link" data-action="go-movements">Ver historial →</button></div>${renderMovementRows(state.movements.slice(0, 5))}</section>
   </div>`;
@@ -477,7 +489,18 @@ function renderMobileNav() {
   if (state.qrMode) return '';
   return `<nav class="mobile-bottom-nav" aria-label="Navegación principal"><button class="${state.page === 'home' ? 'active' : ''}" data-action="navigate" data-page="home"><span>⌂</span><small>Inicio</small></button><button class="${state.page === 'containers' ? 'active' : ''}" data-action="navigate" data-page="containers"><span>▦</span><small>Contar</small></button><button class="${state.page === 'movements' ? 'active' : ''}" data-action="navigate" data-page="movements"><span>↻</span><small>Historial</small></button><button class="${state.page === 'more' ? 'active' : ''}" data-action="navigate" data-page="more"><span>•••</span><small>Más</small></button></nav>`;
 }
+let lastRenderedSignature = '';
 function render() {
+  // Los eventos de Supabase no deben desmontar un input activo mientras se escribe.
+  const editing = document.activeElement?.matches?.('.quantity-input, #clear-history-pin');
+  const signature = [state.page, state.selectedContainer, state.showEditor, state.qrMode, state.clearHistoryOpen, state.productDetailKey].join('|');
+  if (editing && signature === lastRenderedSignature && !state.loading) {
+    const oldToast = ROOT.querySelector('.toast');
+    oldToast?.remove();
+    if (state.toast) ROOT.querySelector('.app-shell')?.insertAdjacentHTML('beforeend', `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>`);
+    return;
+  }
+  lastRenderedSignature = signature;
   const title = ({ home: 'Resumen', containers: state.qrMode ? 'Conteo del recipiente' : 'Contenedores', manage: 'Recipientes y QR', movements: 'Movimientos', protocol: 'Protocolo', more: 'Más opciones' })[state.page] || 'APC Inventario';
   ROOT.innerHTML = `<div class="app-shell ${state.qrMode ? 'qr-mode' : ''}">
     <aside class="desktop-sidebar"><button class="brand-lockup brand-home" data-action="home"><img src="${BASE}apc-logo.png" alt="APC"><span><strong>APC Inventario</strong><small>Control de suministros</small></span></button><nav class="desktop-nav"><button data-action="navigate" data-page="home" class="${state.page === 'home' ? 'active' : ''}"><span>⌂</span>Resumen</button><button data-action="navigate" data-page="containers" class="${state.page === 'containers' ? 'active' : ''}"><span>▦</span>Contenedores</button><button data-action="navigate" data-page="movements" class="${state.page === 'movements' ? 'active' : ''}"><span>↻</span>Movimientos</button><button data-action="navigate" data-page="manage" class="${state.page === 'manage' ? 'active' : ''}"><span>▣</span>Recipientes y QR</button><button data-action="navigate" data-page="protocol" class="${state.page === 'protocol' ? 'active' : ''}"><span>▤</span>Protocolo</button></nav><button class="button secondary sidebar-update" data-action="check-updates">↻ Buscar actualización</button><div class="sidebar-tip"><strong>Uso rápido</strong><p>Escanea el QR del recipiente, escribe las cantidades y guarda el conteo.</p></div></aside>
@@ -485,7 +508,7 @@ function render() {
     <main class="main-area"><header class="page-header"><div><span class="eyebrow">APC CORPORACIÓN</span><h1>${title}</h1></div><div class="header-actions"><span class="connection-pill ${state.online ? 'online' : 'offline'}">● ${state.online ? 'En línea' : 'Sin internet'}</span><button class="icon-button" data-action="refresh" title="Actualizar inventario">↻</button></div></header>
       ${state.loading ? '<div class="loading-card"><span class="spinner"></span><strong>Cargando inventario…</strong></div>' : state.page === 'home' ? renderHome() : state.page === 'containers' ? renderContainersPage() : state.page === 'manage' ? renderManage() : state.page === 'movements' ? renderMovements() : state.page === 'more' ? renderMorePage() : renderProtocol()}
     </main>
-    ${renderMobileNav()}${renderUpdateNotice()}${renderQrModal()}${renderQrHelpModal()}${renderClearHistoryModal()}${state.toast ? `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}
+    ${renderMobileNav()}${renderUpdateNotice()}${renderQrModal()}${renderQrHelpModal()}${renderClearHistoryModal()}${renderProductDetailModal()}${state.toast ? `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}
   </div>`;
 }
 function renderQrModal() {
@@ -560,7 +583,7 @@ function renderQrHelpModal() {
 
 function renderClearHistoryModal() {
   if (!state.clearHistoryOpen) return '';
-  return `<div class="modal-backdrop" data-action="close-clear-history"><section class="qr-modal clear-history-modal" role="dialog" aria-modal="true" aria-label="Eliminar historial completo"><div class="modal-heading"><div><span class="eyebrow">ACCIÓN ADMINISTRATIVA</span><h2>Eliminar todo el historial</h2></div><button class="icon-button" data-action="close-clear-history" aria-label="Cerrar">×</button></div><div class="history-danger-note"><strong>Esta acción no se puede deshacer.</strong><p>Se borrarán todos los movimientos guardados en Supabase, no solo los que aparecen en pantalla. El stock actual, los recipientes y los QR permanecerán intactos.</p></div><div class="form-field"><label for="clear-history-pin">Clave administrativa privada</label><input id="clear-history-pin" type="password" autocomplete="current-password" data-state-field="clearHistoryPin" placeholder="Clave de 4 dígitos" inputmode="numeric" maxlength="4"></div><div class="form-field"><label for="clear-history-confirm">Para confirmar, escribe BORRAR HISTORIAL</label><input id="clear-history-confirm" type="text" autocomplete="off" data-state-field="clearHistoryConfirm" placeholder="BORRAR HISTORIAL"></div><div class="qr-actions"><button class="button secondary" data-action="close-clear-history">Cancelar</button><button class="button danger" data-action="clear-history" ${state.clearingHistory ? 'disabled' : ''}>${state.clearingHistory ? 'Eliminando…' : 'Eliminar todo el historial'}</button></div></section></div>`;
+  return `<div class="modal-backdrop" data-action="close-clear-history"><section class="qr-modal clear-history-modal" role="dialog" aria-modal="true" aria-label="Eliminar historial completo"><div class="modal-heading"><div><span class="eyebrow">ACCIÓN ADMINISTRATIVA</span><h2>Eliminar todo el historial</h2></div><button class="icon-button" data-action="close-clear-history" aria-label="Cerrar">×</button></div><div class="history-danger-note"><strong>Esta acción no se puede deshacer.</strong><p>Se borrarán todos los movimientos guardados en Supabase, no solo los que aparecen en pantalla. El stock actual, los recipientes y los QR permanecerán intactos.</p></div><div class="form-field"><label for="clear-history-pin">Clave administrativa privada</label><input id="clear-history-pin" type="password" autocomplete="off" enterkeyhint="done" data-state-field="clearHistoryPin" placeholder="Clave de 4 dígitos" inputmode="numeric" maxlength="4"></div><div class="qr-actions"><button class="button secondary" data-action="close-clear-history">Cancelar</button><button class="button danger" data-action="clear-history" ${state.clearingHistory ? 'disabled' : ''}>${state.clearingHistory ? 'Eliminando…' : 'Eliminar todo el historial'}</button></div></section></div>`;
 }
 async function createContainer() {
   const name = cleanText(state.createName, 70);
@@ -640,18 +663,11 @@ async function activateEdit(container) {
 
 async function clearAllHistory() {
   const pin = String(state.clearHistoryPin || '').trim();
-  const phrase = String(state.clearHistoryConfirm || '').trim();
   if (!/^\d{4}$/.test(pin)) {
     notify('Escribe la clave de 4 dígitos.', 'error');
     document.getElementById('clear-history-pin')?.focus();
     return;
   }
-  if (phrase !== 'BORRAR HISTORIAL') {
-    notify('Escribe exactamente BORRAR HISTORIAL para confirmar.', 'error');
-    document.getElementById('clear-history-confirm')?.focus();
-    return;
-  }
-  if (!confirm('¿Eliminar definitivamente todos los movimientos? Las cantidades actuales del inventario no cambiarán.')) return;
   if (!supabase) { notify('Supabase no está configurado.', 'error'); return; }
   state.clearingHistory = true;
   render();
@@ -669,7 +685,6 @@ async function clearAllHistory() {
   state.movements = await loadMovements();
   state.clearHistoryOpen = false;
   state.clearHistoryPin = '';
-  state.clearHistoryConfirm = '';
   render();
   const deleted = Number(data || 0);
   notify(`Historial eliminado: ${formatNumber(deleted)} movimientos. El stock actual sigue intacto.`);
@@ -687,8 +702,7 @@ async function saveCount(containerId) {
   const values = {};
   for (const key of keys) {
     const raw = state.drafts[`${containerId}:${key}`] ?? String(logicalQuantity(container, key));
-    if (String(raw).trim() === '') { notify(`Completa la cantidad de ${getItem(key)?.label || key}.`, 'error'); return; }
-    const number = Number(raw);
+    const number = String(raw).trim() === '' ? 0 : Number(raw);
     if (!Number.isInteger(number) || number < 0 || number > MAX_QTY) { notify(`La cantidad de ${getItem(key)?.label || key} no es válida.`, 'error'); return; }
     values[key] = number;
   }
@@ -766,6 +780,7 @@ async function openContainer(containerId) {
   if (!container) return;
   try {
     const { created } = await ensureContainerToken(container, false);
+    if (!state.showEditor || state.selectedContainer !== containerId) history.pushState({apcView:'editor',containerId},'',location.href);
     state.selectedContainer = containerId;
     state.showEditor = true;
     state.page = 'containers';
@@ -783,10 +798,11 @@ function goHome() {
   state.page = 'home';
   state.showEditor = false;
   state.menuOpen = false;
-  if (location.search) history.replaceState({}, '', BASE);
+  if (location.search) history.replaceState({apcView: 'home'}, '', BASE);
   render();
 }
-function navigate(page) {
+function navigate(page, recordHistory = true) {
+  if (recordHistory && (state.page !== page || state.showEditor)) history.pushState({apcView:page},'',location.href);
   if (page === 'home' && state.qrMode) { goHome(); return; }
   state.page = page;
   state.menuOpen = false;
@@ -858,6 +874,40 @@ function printQrLabel() {
   w.document.close();
 }
 
+window.addEventListener('popstate', event => {
+  const view = event.state || {};
+  const returningFromQr = state.qrMode;
+  state.menuOpen = false;
+  state.clearHistoryOpen = false;
+  state.productDetailKey = '';
+  state.qrPreview = null;
+  state.qrBatchPreview = [];
+  if (view.apcView === 'editor' && getContainer(view.containerId)) {
+    state.page='containers'; state.selectedContainer=view.containerId; state.showEditor=true;
+  } else {
+    state.showEditor = false;
+    state.qrMode = false;
+    state.qrContainerId = '';
+    state.page = ['home','containers','manage','movements','more','protocol'].includes(view.apcView) ? view.apcView : (returningFromQr ? 'containers' : 'home');
+    if (returningFromQr && location.search) history.replaceState({apcView:'containers'},'',BASE);
+  }
+  render();
+  window.scrollTo(0,0);
+});
+// Back de Android puede llamar esto en futuras APK. En la web también usamos el historial real.
+window.APCHandleBack = () => {
+  if (state.clearHistoryOpen) { state.clearHistoryOpen=false; render(); return true; }
+  if (state.productDetailKey) { state.productDetailKey=''; render(); return true; }
+  if (state.qrPreview || state.qrBatchPreview.length) { state.qrPreview=null; state.qrBatchPreview=[]; render(); return true; }
+  if (state.showEditor || state.qrMode) {
+    state.showEditor=false; state.qrMode=false; state.qrContainerId=''; state.selectedContainer='';
+    state.page='containers';
+    if (location.search) history.replaceState({apcView:'containers'},'',BASE);
+    render(); window.scrollTo(0,0); return true;
+  }
+  if (state.page !== 'home') { state.page='home'; render(); window.scrollTo(0,0); return true; }
+  return false;
+};
 ROOT.addEventListener('click', async event => {
   const actionNode = event.target.closest('[data-action]');
   const focusNode = event.target.closest('[data-focus-item]');
@@ -869,7 +919,10 @@ ROOT.addEventListener('click', async event => {
   }
   if (!actionNode) return;
   const action = actionNode.dataset.action;
+  if (document.activeElement?.matches?.('.quantity-input, #clear-history-pin')) document.activeElement.blur();
   const id = actionNode.dataset.id;
+  if (action === 'show-product-detail') { state.productDetailKey = actionNode.dataset.key; render(); return; }
+  if (action === 'close-product-detail') { if (event.target.closest('.product-detail-modal') && !event.target.closest('[data-action="close-product-detail"]')) return; state.productDetailKey=''; render(); return; }
   if (action === 'home') { goHome(); return; }
   if (action === 'navigate') { navigate(actionNode.dataset.page); return; }
   if (action === 'open-menu') { state.menuOpen = true; render(); return; }
@@ -879,7 +932,7 @@ ROOT.addEventListener('click', async event => {
   if (action === 'go-manage') { navigate('manage'); return; }
   if (action === 'go-movements') { navigate('movements'); return; }
   if (action === 'open-container') { await openContainer(id); return; }
-  if (action === 'back-containers') { state.showEditor = false; state.selectedContainer = ''; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  if (action === 'back-containers') { if (history.state?.apcView === 'editor') history.back(); else { state.showEditor = false; state.selectedContainer = ''; render(); } window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   if (action === 'refresh') { await reloadData(); notify('Inventario actualizado.'); return; }
   if (action === 'check-updates') { await checkUpdates(true); return; }
   if (action === 'later-update') { state.updateDismissed = true; render(); return; }
@@ -889,8 +942,8 @@ ROOT.addEventListener('click', async event => {
   if (action === 'activate-edit') { const container = getContainer(id); if (container) await activateEdit(container); return; }
   if (action === 'show-qr') { const container = getContainer(id); if (container) await openQr(container); return; }
   if (action === 'generate-all-qr') { await generateAllQr(); return; }
-  if (action === 'open-clear-history') { state.clearHistoryPin = ''; state.clearHistoryConfirm = ''; state.clearHistoryOpen = true; render(); return; }
-  if (action === 'close-clear-history') { if (event.target.closest('.clear-history-modal') && !event.target.closest('[data-action="close-clear-history"]')) return; state.clearHistoryOpen = false; state.clearHistoryPin = ''; state.clearHistoryConfirm = ''; render(); return; }
+  if (action === 'open-clear-history') { state.clearHistoryPin = ''; state.clearHistoryOpen = true; render(); return; }
+  if (action === 'close-clear-history') { if (event.target.closest('.clear-history-modal') && !event.target.closest('[data-action="close-clear-history"]')) return; state.clearHistoryOpen = false; state.clearHistoryPin = ''; render(); return; }
   if (action === 'clear-history') { await clearAllHistory(); return; }
   if (action === 'close-qr-help') { if (event.target.closest('.qr-help-modal') && !event.target.closest('[data-action="close-qr-help"]')) return; state.qrHelpOpen = false; state.qrHelpContainerId = ''; render(); return; }
   if (action === 'edit-container') {
@@ -912,10 +965,13 @@ ROOT.addEventListener('click', async event => {
   if (action === 'pdf-report') { printReport(); return; }
   if (action === 'whatsapp') { shareWhatsApp(); return; }
 });
+ROOT.addEventListener('keydown', event => { if(event.key === 'Enter' && event.target.matches('[data-qty-input], #clear-history-pin')) event.target.blur(); });
 ROOT.addEventListener('focusin', event => {
   if (event.target.matches('[data-qty-input]')) {
     const key = event.target.dataset.qtyInput;
     document.querySelectorAll('[data-item-card]').forEach(card => card.classList.toggle('selected', card.dataset.itemCard === key));
+    // Selecciona el valor completo: la primera cifra nueva reemplaza al cero anterior.
+    event.target.select();
   }
 });
 ROOT.addEventListener('input', event => {
@@ -926,6 +982,13 @@ ROOT.addEventListener('input', event => {
     state.drafts[`${input.dataset.container}:${input.dataset.qtyInput}`] = raw;
   }
   if (input.matches('[data-state-field]')) state[input.dataset.stateField] = input.value;
+});
+ROOT.addEventListener('focusout', event => {
+  const input = event.target;
+  if (input.matches('[data-qty-input]') && input.value.trim() === '') {
+    input.value = '0';
+    state.drafts[`${input.dataset.container}:${input.dataset.qtyInput}`] = '0';
+  }
 });
 ROOT.addEventListener('change', event => {
   const input = event.target;
@@ -950,6 +1013,7 @@ if (supabase) {
 }
 if (state.qrMode) saveToken(state.qrContainerId, initialToken);
 initialize();
+if (state.qrMode) history.pushState({apcView:'qr-editor'},'',location.href);
 if (!state.qrMode) setTimeout(() => checkUpdates(false), 1100);
 
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register(`${BASE}sw.js`).catch(() => undefined)); }
