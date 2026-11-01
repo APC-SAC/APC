@@ -15,7 +15,7 @@ const CACHE_KEY = 'apc_inventory_stock_v7';
 const CONTAINERS_CACHE_KEY = 'apc_inventory_containers_v7';
 const QUEUE_KEY = 'apc_inventory_pending_v7';
 const MAX_QTY = 100000;
-const WEB_VERSION = '11.0.0';
+const WEB_VERSION = '12.0.0';
 const UPDATE_URL = `${BASE}version.json`;
 
 const DB_KEYS = ['taper_rey', 'taper_gyg', 'tapas', 'tenedores'];
@@ -280,7 +280,7 @@ function renderContainerCard(container, actionLabel = 'Contar') {
   const total = containerTotal(container);
   const token = getToken(container.id);
   return `<article class="container-tile">
-    <div class="container-tile-icon">▦</div>
+    <div class="container-tile-icon">${renderContainerCategoryIcon(container)}</div>
     <div class="container-tile-body"><span class="eyebrow">CONTENEDOR</span><h3>${escapeHtml(container.name)}</h3><p>${escapeHtml(parseMeta(container).description || 'Sin descripción adicional')}</p><span class="contents-chip">${escapeHtml(contentsLabel(container))}</span><strong class="container-tile-total">${formatNumber(total)} <small>unidades</small></strong></div>
     <div class="container-tile-actions"><button class="button primary small" data-action="open-container" data-id="${escapeHtml(container.id)}">${actionLabel}</button>${token ? '<span class="access-state ready">Edición lista en este navegador</span>' : '<span class="access-state">Se activa al abrir</span>'}</div>
   </article>`;
@@ -334,16 +334,23 @@ function categoryOf(container) {
   if (/\btacho\b|tacho-|tachos/.test(text)) return 'Tachos';
   return 'Otros recipientes';
 }
+function renderCategoryIcon(category) {
+  const src = category === 'Cajas' ? `${BASE}assets/images/icon-cajas.png` : category === 'Otros recipientes' ? `${BASE}assets/images/icon-otros.png` : '';
+  if (src) return `<img src="${src}" alt="${escapeHtml(category)}">`;
+  if (category === 'Tachos') return '<span>🪣</span>';
+  return '<span>▦</span>';
+}
+function renderContainerCategoryIcon(container) { return renderCategoryIcon(categoryOf(container)); }
 function renderGroupedContainers(containers, cardBuilder) {
   const groups = [
-    { name: 'Cajas', icon: '📦', hint: 'Tápers y recipientes de almacenamiento' },
-    { name: 'Tachos', icon: '🪣', hint: 'Tapas, tenedores u otros suministros' },
-    { name: 'Otros recipientes', icon: '▦', hint: 'Bandejas, estantes, valdes y más' }
+    { name: 'Cajas', hint: 'Tápers y recipientes de almacenamiento' },
+    { name: 'Tachos', hint: 'Tapas, tenedores u otros suministros' },
+    { name: 'Otros recipientes', hint: 'Bandejas, estantes, valdes y más' }
   ];
   return `<div class="inventory-groups">${groups.map(g => {
      const list = containers.filter(c => categoryOf(c) === g.name);
      if (!list.length) return '';
-     return `<details class="inventory-group" open><summary><span class="group-symbol">${g.icon}</span><span class="group-label"><strong>${g.name}</strong><small>${g.hint}</small></span><span class="group-count">${list.length}</span><span class="group-chevron">⌄</span></summary><div class="container-list">${list.map(cardBuilder).join('')}</div></details>`;
+     return `<details class="inventory-group"><summary><span class="group-symbol">${renderCategoryIcon(g.name)}</span><span class="group-label"><strong>${g.name}</strong><small>${g.hint}</small></span><span class="group-count">${list.length}</span><span class="group-chevron">⌄</span></summary><div class="container-list">${list.map(cardBuilder).join('')}</div></details>`;
   }).join('')}</div>`;
 }
 function renderUpdateNotice() {
@@ -355,9 +362,16 @@ function renderVersionSection() {
 }
 function renderHome() {
   const totals = aggregateTotals();
+  const inAndroid = Boolean(window.APCAndroid?.scanQr);
+  const primaryAction = inAndroid
+    ? '<button class="button primary" data-action="native-scan">▣ &nbsp; Escanear código QR</button>'
+    : '<button class="button primary" data-action="go-containers">▦ &nbsp; Contar suministros</button>';
+  const secondaryAction = inAndroid
+    ? '<button class="button secondary" data-action="go-containers">▦ &nbsp; Contar suministros</button>'
+    : '<button class="button secondary" data-action="go-manage">＋ &nbsp; Crear recipiente</button>';
   return `<div class="page-stack">
     <section class="welcome-panel">
-      <div class="welcome-copy"><span class="eyebrow">APC CORPORACIÓN · INVENTARIO</span><h2>Todo tu inventario, en un solo lugar.</h2><p>Elige un recipiente, escribe las cantidades y guarda. También puedes escanear su QR para entrar directamente al conteo.</p><div class="welcome-actions"><button class="button primary" data-action="go-containers">▦ &nbsp; Contar suministros</button><button class="button secondary" data-action="go-manage">＋ &nbsp; Crear recipiente</button></div></div>
+      <div class="welcome-copy"><span class="eyebrow">APC CORPORACIÓN · INVENTARIO</span><h2>Todo tu inventario, en un solo lugar.</h2><p>Elige un recipiente, escribe las cantidades y guarda. También puedes escanear su QR para entrar directamente al conteo.</p><div class="welcome-actions">${primaryAction}${secondaryAction}</div></div>
       <div class="overview-stats"><div><span>Recipientes activos</span><strong>${state.containers.length}</strong></div><div><span>Total de unidades</span><strong>${formatNumber(totals.totalUnits)}</strong></div><div><span>Total de tápers</span><strong>${formatNumber(totals.totalTapers)}</strong></div><div><span>Total de tapas</span><strong>${formatNumber(totals.totalTapas)}</strong></div></div>
     </section>
     <section class="section-block"><div class="section-title-row"><div><span class="eyebrow">STOCK GENERAL</span><h2>Resumen de suministros</h2><p>Totales de todos los recipientes activos.</p></div><div class="report-actions big-report-actions"><button class="button secondary report-pdf" data-action="pdf-report"><span class="button-icon">▤</span><span>Informe PDF</span></button><button class="button whatsapp report-whatsapp" data-action="whatsapp"><span class="button-icon">✉</span><span>Compartir WhatsApp</span></button></div></div>
@@ -424,7 +438,7 @@ function renderManage() {
 function renderManageCard(container) {
   const editing = state.editContainerId === container.id;
   const meta = parseMeta(container);
-  return `<article class="manage-tile"><div class="manage-tile-head"><div class="container-tile-icon">▦</div><div><span class="eyebrow">RECIPIENTE</span><h3>${escapeHtml(container.name)}</h3><p>${escapeHtml(meta.description || 'Sin descripción')}</p></div></div><div class="manage-tile-meta"><span class="contents-chip">${escapeHtml(contentsLabel(container))}</span><strong>${formatNumber(containerTotal(container))} unidades</strong></div><div class="manage-actions"><button class="button secondary small" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ QR</button><button class="button secondary small" data-action="edit-container" data-id="${escapeHtml(container.id)}">✎ Editar</button><button class="button danger small" data-action="delete-container" data-id="${escapeHtml(container.id)}">Eliminar</button></div>${editing ? renderEditForm(container) : ''}</article>`;
+  return `<article class="manage-tile"><div class="manage-tile-head"><div class="container-tile-icon">${renderContainerCategoryIcon(container)}</div><div><span class="eyebrow">RECIPIENTE</span><h3>${escapeHtml(container.name)}</h3><p>${escapeHtml(meta.description || 'Sin descripción')}</p></div></div><div class="manage-tile-meta"><span class="contents-chip">${escapeHtml(contentsLabel(container))}</span><strong>${formatNumber(containerTotal(container))} unidades</strong></div><div class="manage-actions"><button class="button secondary small" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ QR</button><button class="button secondary small" data-action="edit-container" data-id="${escapeHtml(container.id)}">✎ Editar</button><button class="button danger small" data-action="delete-container" data-id="${escapeHtml(container.id)}">Eliminar</button></div>${editing ? renderEditForm(container) : ''}</article>`;
 }
 function renderEditForm(container) {
   return `<div class="edit-form"><div class="form-field"><label>Nombre del recipiente</label><input data-state-field="editName" value="${escapeHtml(state.editName)}" maxlength="70"></div><div class="form-field"><label>Descripción</label><input data-state-field="editDescription" value="${escapeHtml(state.editDescription)}" maxlength="350"></div><div class="form-field"><label>Suministros asignados</label><div class="supply-choice-grid compact-choices">${ITEM_DEFS.map(item => supplyChoice(item.key, state.editKeys.includes(item.key))).join('')}</div></div><div class="edit-form-actions"><button class="button primary" data-action="save-edit" data-id="${escapeHtml(container.id)}">Guardar cambios</button><button class="button secondary" data-action="cancel-edit">Cancelar</button></div></div>`;
@@ -860,6 +874,7 @@ ROOT.addEventListener('click', async event => {
   if (action === 'navigate') { navigate(actionNode.dataset.page); return; }
   if (action === 'open-menu') { state.menuOpen = true; render(); return; }
   if (action === 'close-menu') { if (event.target.closest('.mobile-drawer') && !event.target.closest('[data-action="close-menu"]')) return; state.menuOpen = false; render(); return; }
+  if (action === 'native-scan') { if (window.APCAndroid?.scanQr) window.APCAndroid.scanQr(); else navigate('containers'); return; }
   if (action === 'go-containers') { navigate('containers'); return; }
   if (action === 'go-manage') { navigate('manage'); return; }
   if (action === 'go-movements') { navigate('movements'); return; }

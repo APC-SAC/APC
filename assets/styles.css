@@ -274,3 +274,5 @@ button:focus-visible,input:focus-visible{outline:3px solid rgba(21,150,107,.25);
   .more-action-icon{width:48px;height:48px;flex-basis:48px;font-size:26px}
   .more-action-text strong{font-size:16px}
 }
+
+.container-tile-icon img,.group-symbol img{width:82%;height:82%;object-fit:contain;display:block}.container-tile-icon span,.group-symbol span{line-height:1}
