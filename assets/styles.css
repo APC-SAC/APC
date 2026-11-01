@@ -122,3 +122,27 @@ button:focus-visible,input:focus-visible{outline:3px solid rgba(21,150,107,.25);
   .main-area{padding-left:10px;padding-right:10px}.mobile-topbar{padding-left:11px;padding-right:11px}.mobile-topbar .brand-lockup{gap:8px}.mobile-topbar .brand-lockup img{width:38px;height:38px}.mobile-topbar .brand-lockup strong{font-size:15px}.mobile-header-actions{gap:5px}.mobile-header-actions .connection-pill{font-size:9px;padding:6px 7px}.mobile-header-actions .icon-button{width:39px;height:39px}.product-pick{grid-template-columns:106px minmax(0,1fr) 22px;gap:9px}.product-pick .product-image{width:106px;height:103px}.product-heading strong{font-size:17px}.summary-product .product-image.compact{width:53px;height:53px}.summary-product{gap:7px;padding:9px}.summary-product strong{font-size:20px}.container-tile-actions{grid-column:1/-1}.container-tile{grid-template-columns:43px minmax(0,1fr)}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+
+/* V8 — protección de QR existentes y limpieza segura del historial */
+.qr-safe-note{max-width:520px;margin:13px auto 0;padding:11px 14px;border:1px solid #d7eade;border-radius:13px;background:#f1faf4;color:#287451;font-size:12px;line-height:1.55;text-align:center;font-weight:650}
+.qr-help-modal,.clear-history-modal{width:min(100%,540px)}
+.qr-help-card{display:flex;align-items:flex-start;gap:13px;padding:15px;border:1px solid #dbe7ee;border-radius:16px;background:#f7fafc}
+.qr-help-icon{flex:0 0 42px;width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:#eaf2f7;color:var(--navy);font-size:23px;font-weight:900}
+.qr-help-card strong{display:block;color:var(--navy);font-size:15px}
+.qr-help-card p{margin:5px 0 0;color:#687d8b;font-size:13px;line-height:1.55}
+.qr-help-steps{display:grid;gap:10px;margin:17px 0;padding-left:25px;color:#425c6e;font-size:13px;line-height:1.55}
+.qr-help-steps li{padding-left:3px}
+.history-safety-note{padding:12px 15px;border:1px solid #dbe8ee;border-radius:14px;background:#f6fafc;color:#647b89;font-size:12px;line-height:1.55}
+.history-safety-note strong{color:var(--navy)}
+.history-danger-note{padding:15px 16px;border:1px solid #f1d4cc;border-radius:16px;background:#fff6f3;color:#8e4a38}
+.history-danger-note strong{display:block;font-size:14px;color:#a23e2d}
+.history-danger-note p{margin:6px 0 0;font-size:12px;line-height:1.55}
+.clear-history-modal .form-field{margin-top:16px}
+.clear-history-modal .qr-actions{justify-content:stretch}
+.clear-history-modal .qr-actions .button{flex:1}
+@media(max-width:600px){
+  .qr-help-modal,.clear-history-modal{padding:18px;border-radius:22px}
+  .qr-help-modal .modal-heading h2,.clear-history-modal .modal-heading h2{font-size:20px}
+  .clear-history-modal .qr-actions{display:grid;grid-template-columns:1fr}
+}

@@ -1,5 +1,5 @@
-const APP_CACHE = 'apc-inventario-app-v7';
-const CDN_CACHE = 'apc-inventario-cdn-v7';
+const APP_CACHE = 'apc-inventario-app-v8';
+const CDN_CACHE = 'apc-inventario-cdn-v8';
 const SHELL = [
   '/APC/', '/APC/index.html', '/APC/apc-logo.png', '/APC/manifest.webmanifest',
   '/APC/assets/styles.css', '/APC/assets/main.js', '/APC/assets/images/tapas-rey.jpg'
