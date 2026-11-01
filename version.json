@@ -1,0 +1,6 @@
+{
+  "web_version": "10.0.0",
+  "android_version": "1.1.0",
+  "apk_url": "https://github.com/APC-SAC/APC/releases/latest",
+  "release_notes": "Nuevo conteo y panel de actualizaciones"
+}

@@ -15,6 +15,9 @@ const CACHE_KEY = 'apc_inventory_stock_v7';
 const CONTAINERS_CACHE_KEY = 'apc_inventory_containers_v7';
 const QUEUE_KEY = 'apc_inventory_pending_v7';
 const MAX_QTY = 100000;
+const WEB_VERSION = '10.0.0';
+const UPDATE_URL = `${BASE}version.json`;
+
 const DB_KEYS = ['taper_rey', 'taper_gyg', 'tapas', 'tenedores'];
 const ITEM_DEFS = [
   { key: 'taper_rey', dbKey: 'taper_rey', brand: 'REY', label: 'Tápers Rey', short: 'Rey', image: 'https://www.plasticosrey.com/wp-content/uploads/2023/05/1563468038_2dca2a147e4758df6523c78be8b65869.22714-1.jpeg', alt: 'Táper de la marca Rey', group: 'taper' },
@@ -41,6 +44,10 @@ const state = {
   qrMode: Boolean(initialContainerId && initialToken),
   qrContainerId: initialContainerId,
   menuOpen: false,
+  updateChecking: false,
+  remoteWebVersion: '',
+  webUpdateAvailable: false,
+  updateDismissed: false,
   loading: true,
   online: navigator.onLine,
   syncing: false,
@@ -59,6 +66,8 @@ const state = {
   editDescription: '',
   editKeys: [],
   qrPreview: null,
+  qrBatchPreview: [],
+  qrBatchBusy: false,
   qrHelpOpen: false,
   qrHelpContainerId: '',
   clearHistoryOpen: false,
@@ -273,12 +282,76 @@ function renderContainerCard(container, actionLabel = 'Contar') {
   return `<article class="container-tile">
     <div class="container-tile-icon">▦</div>
     <div class="container-tile-body"><span class="eyebrow">CONTENEDOR</span><h3>${escapeHtml(container.name)}</h3><p>${escapeHtml(parseMeta(container).description || 'Sin descripción adicional')}</p><span class="contents-chip">${escapeHtml(contentsLabel(container))}</span><strong class="container-tile-total">${formatNumber(total)} <small>unidades</small></strong></div>
-    <div class="container-tile-actions"><button class="button primary small" data-action="open-container" data-id="${escapeHtml(container.id)}">${actionLabel}</button>${token ? '<span class="access-state ready">Edición activada</span>' : '<span class="access-state">Vincular QR impreso</span>'}</div>
+    <div class="container-tile-actions"><button class="button primary small" data-action="open-container" data-id="${escapeHtml(container.id)}">${actionLabel}</button>${token ? '<span class="access-state ready">Edición lista en este navegador</span>' : '<span class="access-state">Se activa al abrir</span>'}</div>
   </article>`;
 }
 function renderTotalsCard(label, value, imageKey, tone = '') {
   const item = getItem(imageKey);
   return `<article class="summary-product ${tone}">${itemImage(item, true)}<div><span>${escapeHtml(label)}</span><strong>${formatNumber(value)}</strong><small>unidades</small></div></article>`;
+}
+function compareVersions(a, b) {
+  const ax = String(a).replace(/[^0-9.]/g, '').split('.').map(Number);
+  const bx = String(b).replace(/[^0-9.]/g, '').split('.').map(Number);
+  for (let i=0; i<Math.max(ax.length,bx.length); i++) {
+    const d=(ax[i]||0)-(bx[i]||0); if(d) return Math.sign(d);
+  }
+  return 0;
+}
+async function checkUpdates(manual=false) {
+  if (state.updateChecking) return;
+  if (window.APCAndroid?.checkForUpdates) {
+    // En la APK, Android compara su propia versión con el manifiesto de GitHub.
+    if (manual) window.APCAndroid.checkForUpdates();
+    return;
+  }
+  state.updateChecking = true;
+  if (manual) render();
+  try {
+    const response = await fetch(`${UPDATE_URL}?ts=${Date.now()}`, {cache:'no-store'});
+    if (!response.ok) throw Error('No se pudo consultar el archivo de versiones en GitHub.');
+    const data = await response.json();
+    state.remoteWebVersion = String(data.web_version || '');
+    state.webUpdateAvailable = compareVersions(state.remoteWebVersion, WEB_VERSION) > 0;
+    if (state.webUpdateAvailable) state.updateDismissed = false;
+    else if (manual) notify('Tu web APC está actualizada (v' + WEB_VERSION + ').');
+    if (manual || state.webUpdateAvailable) render();
+  } catch (error) { if(manual) notify('No se pudo comprobar la actualización. Revisa tu conexión.', 'error'); }
+  finally { state.updateChecking = false; }
+}
+async function applyWebUpdate() {
+  // Se actualiza el registro del service worker y se obtiene el HTML más reciente.
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.filter(r => r.scope.includes('/APC/')).map(r=>r.update()));
+    }
+  } catch {}
+  location.assign(`${BASE}?v=${Date.now()}`);
+}
+function categoryOf(container) {
+  const text = `${container.name || ''} ${container.id || ''}`.toLocaleLowerCase('es');
+  if (/\bcaja\b|caja-|cajas/.test(text)) return 'Cajas';
+  if (/\btacho\b|tacho-|tachos/.test(text)) return 'Tachos';
+  return 'Otros recipientes';
+}
+function renderGroupedContainers(containers, cardBuilder) {
+  const groups = [
+    { name: 'Cajas', icon: '📦', hint: 'Tápers y recipientes de almacenamiento' },
+    { name: 'Tachos', icon: '🪣', hint: 'Tapas, tenedores u otros suministros' },
+    { name: 'Otros recipientes', icon: '▦', hint: 'Bandejas, estantes, valdes y más' }
+  ];
+  return `<div class="inventory-groups">${groups.map(g => {
+     const list = containers.filter(c => categoryOf(c) === g.name);
+     if (!list.length) return '';
+     return `<details class="inventory-group" open><summary><span class="group-symbol">${g.icon}</span><span class="group-label"><strong>${g.name}</strong><small>${g.hint}</small></span><span class="group-count">${list.length}</span><span class="group-chevron">⌄</span></summary><div class="container-list">${list.map(cardBuilder).join('')}</div></details>`;
+  }).join('')}</div>`;
+}
+function renderUpdateNotice() {
+  if (!state.webUpdateAvailable || state.updateDismissed || state.qrMode) return '';
+  return `<div class="version-backdrop"><section class="version-dialog" role="dialog" aria-modal="true" aria-label="Nueva versión"><div class="version-icon">↻</div><h2>¡Nueva versión disponible!</h2><p>Ya está publicada APC v${escapeHtml(state.remoteWebVersion)} en GitHub. ¿Quieres actualizar la web?</p><div class="version-buttons"><button class="button secondary" data-action="later-update">Más tarde</button><button class="button primary" data-action="apply-update">Actualizar ahora</button></div></section></div>`;
+}
+function renderVersionSection() {
+  return `<section class="update-settings"><span class="eyebrow">MANTENIMIENTO</span><h3>Actualizaciones</h3><p>Versión web ${WEB_VERSION}. Busca novedades publicadas en tu GitHub.</p><button class="button secondary update-button" data-action="check-updates">↻ &nbsp; ${state.updateChecking ? 'Buscando…' : 'Buscar actualización'}</button></section>`;
 }
 function renderHome() {
   const totals = aggregateTotals();
@@ -287,7 +360,7 @@ function renderHome() {
       <div class="welcome-copy"><span class="eyebrow">APC CORPORACIÓN · INVENTARIO</span><h2>Todo tu inventario, en un solo lugar.</h2><p>Elige un recipiente, escribe las cantidades y guarda. También puedes escanear su QR para entrar directamente al conteo.</p><div class="welcome-actions"><button class="button primary" data-action="go-containers">▦ &nbsp; Contar suministros</button><button class="button secondary" data-action="go-manage">＋ &nbsp; Crear recipiente</button></div></div>
       <div class="overview-stats"><div><span>Recipientes activos</span><strong>${state.containers.length}</strong></div><div><span>Total de unidades</span><strong>${formatNumber(totals.totalUnits)}</strong></div><div><span>Total de tápers</span><strong>${formatNumber(totals.totalTapers)}</strong></div><div><span>Total de tapas</span><strong>${formatNumber(totals.totalTapas)}</strong></div></div>
     </section>
-    <section class="section-block"><div class="section-title-row"><div><span class="eyebrow">STOCK GENERAL</span><h2>Resumen de suministros</h2><p>Totales de todos los recipientes activos.</p></div><div class="report-actions"><button class="button secondary small" data-action="pdf-report">⇩ PDF</button><button class="button whatsapp small" data-action="whatsapp">Compartir WhatsApp</button></div></div>
+    <section class="section-block"><div class="section-title-row"><div><span class="eyebrow">STOCK GENERAL</span><h2>Resumen de suministros</h2><p>Totales de todos los recipientes activos.</p></div><div class="report-actions big-report-actions"><button class="button secondary report-pdf" data-action="pdf-report"><span class="button-icon">▤</span><span>Informe PDF</span></button><button class="button whatsapp report-whatsapp" data-action="whatsapp"><span class="button-icon">✉</span><span>Compartir WhatsApp</span></button></div></div>
       <div class="summary-products">
         ${renderTotalsCard('Tápers Rey', totals.taper_rey, 'taper_rey')}
         ${renderTotalsCard('Tápers GyG', totals.taper_gyg, 'taper_gyg')}
@@ -297,7 +370,7 @@ function renderHome() {
       </div>
     </section>
     <section class="section-block"><div class="section-title-row"><div><span class="eyebrow">ACCESO RÁPIDO</span><h2>Tus recipientes</h2><p>Toca “Abrir conteo” para registrar cantidades desde esta pantalla.</p></div><button class="button secondary small" data-action="go-containers">Ver todos</button></div>
-      <div class="container-list">${state.containers.length ? state.containers.map(container => renderContainerCard(container, 'Abrir conteo')).join('') : '<div class="empty-state">Todavía no has creado recipientes. Crea el primero para empezar.</div>'}</div>
+      <div class="container-list">${state.containers.length ? renderGroupedContainers(state.containers, container => renderContainerCard(container, 'Abrir conteo')) : '<div class="empty-state">Todavía no has creado recipientes. Crea el primero para empezar.</div>'}</div>
     </section>
     <section class="section-block recent-section"><div class="section-title-row"><div><span class="eyebrow">ACTIVIDAD</span><h2>Últimos movimientos</h2></div><button class="text-link" data-action="go-movements">Ver historial →</button></div>${renderMovementRows(state.movements.slice(0, 5))}</section>
   </div>`;
@@ -313,21 +386,25 @@ function renderContainersPage() {
     return container ? renderEditor(container, true) : '<div class="empty-state">No se encontró este recipiente.</div>';
   }
   if (state.showEditor && getContainer(state.selectedContainer)) return renderEditor(getContainer(state.selectedContainer), false);
-  return `<div class="page-stack"><section class="section-block"><div class="section-title-row"><div><span class="eyebrow">REGISTRO DE EXISTENCIAS</span><h2>¿Qué recipiente vas a contar?</h2><p>Selecciona uno para escribir sus cantidades.</p></div><button class="button primary small" data-action="go-manage">＋ Nuevo</button></div><div class="container-list">${state.containers.map(container => renderContainerCard(container, 'Abrir')).join('') || '<div class="empty-state">No hay recipientes. Crea uno para comenzar.</div>'}</div></section></div>`;
+  return `<div class="page-stack"><section class="section-block"><div class="section-title-row"><div><span class="eyebrow">REGISTRO DE EXISTENCIAS</span><h2>¿Qué recipiente vas a contar?</h2><p>Selecciona uno para escribir sus cantidades.</p></div><button class="button primary small" data-action="go-manage">＋ Nuevo</button></div><div class="grouped-container-list">${state.containers.length ? renderGroupedContainers(state.containers, container => renderContainerCard(container, 'Abrir conteo')) : '<div class="empty-state">No hay recipientes. Crea uno para comenzar.</div>'}</div></section></div>`;
 }
 function renderEditor(container, qrMode) {
   const keys = visibleKeys(container);
   const total = keys.reduce((sum, key) => sum + logicalQuantity(container, key), 0);
   const token = getToken(container.id);
-  const canSave = Boolean(token);
   const content = keys.map(key => renderProductCard(container, key)).join('');
-  return `<div class="page-stack editor-page">
-    ${!qrMode ? `<button class="back-link" data-action="back-containers">← Volver a todos los recipientes</button>` : `<div class="qr-entry-note"><span class="qr-entry-icon">✓</span><div><strong>Entraste al recipiente correcto</strong><small>Este QR abre únicamente ${escapeHtml(container.name)}.</small></div></div>`}
-    <section class="editor-hero"><div><span class="eyebrow">${qrMode ? 'CONTEO POR QR' : 'CONTEO DE SUMINISTROS'}</span><h2>${escapeHtml(container.name)}</h2><p>${escapeHtml(parseMeta(container).description || 'Registra las cantidades físicas de este recipiente.')}</p><div class="contents-chip">Contiene: ${escapeHtml(contentsLabel(container))}</div></div><div class="editor-total"><span>Total actual</span><strong>${formatNumber(total)}</strong><small>unidades</small></div></section>
-    <section class="section-block count-section"><div class="section-title-row"><div><span class="eyebrow">PASO 1</span><h2>Selecciona cada suministro y escribe su cantidad</h2><p>No necesitas sumar ni restar. Escribe el número que contaste.</p></div></div><div class="product-grid">${content || '<div class="empty-state">Este recipiente no tiene suministros asignados.</div>'}</div>
-      ${canSave ? '' : `<div class="permission-panel"><div class="permission-icon">🔒</div><div><strong>Vincula el QR que ya está impreso</strong><p>Escanea la etiqueta actual una sola vez con este teléfono. No necesitas generar ni imprimir otro código.</p><button class="button secondary" data-action="activate-edit" data-id="${escapeHtml(container.id)}">Cómo vincular mi QR</button></div></div>`}
-      <div class="save-bar"><div><span class="eyebrow">PASO 2</span><strong>¿Ya terminaste el conteo?</strong><small>Revisa las cantidades antes de guardar.</small></div><button class="button primary save-button" data-action="save-count" data-id="${escapeHtml(container.id)}" ${!canSave || state.saving ? 'disabled' : ''}>${state.saving ? 'Guardando…' : '✓ Guardar cantidades'}</button></div>
+  return `<div class="page-stack editor-page step-first">
+    <div class="editor-compact-head">
+      <button class="back-link" data-action="${qrMode ? 'home' : 'back-containers'}">← ${qrMode ? 'Volver al inicio' : 'Volver a recipientes'}</button>
+      <div><span class="eyebrow">REGISTRO RÁPIDO</span><h2>${escapeHtml(container.name)}</h2></div>
+      <span class="editor-top-total">${formatNumber(total)} <small>actual</small></span>
+    </div>
+    <section class="section-block count-section">
+      <div class="section-title-row"><div><span class="step-tag">PASO 1 · CONTAR</span><h2>Escribe lo que tienes ahora</h2><p>Toca la foto del producto o el número y escribe la cantidad física.</p></div></div>
+      <div class="product-grid">${content || '<div class="empty-state">Este recipiente no tiene suministros asignados.</div>'}</div>
+      <div class="save-bar"><div><span class="step-tag">PASO 2 · GUARDAR</span><strong>¿Terminaste de contar?</strong><small>Guarda las cantidades registradas.</small></div><button class="button primary save-button" data-action="save-count" data-id="${escapeHtml(container.id)}" ${state.saving ? 'disabled' : ''}>${state.saving ? 'Guardando…' : '✓ Guardar conteo'}</button></div>
     </section>
+    <section class="editor-hero editor-info-bottom"><div><span class="eyebrow">INFORMACIÓN DEL RECIPIENTE</span><h2>${escapeHtml(container.name)}</h2><p>${escapeHtml(parseMeta(container).description || 'Conteo de suministros de este recipiente.')}</p><div class="contents-chip">Contiene: ${escapeHtml(contentsLabel(container))}</div><button class="button secondary small editor-qr-button" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ Ver / imprimir QR</button></div><div class="editor-total"><span>Stock registrado</span><strong>${formatNumber(total)}</strong><small>unidades</small></div></section>
   </div>`;
 }
 function supplyChoice(key, selected) {
@@ -335,13 +412,13 @@ function supplyChoice(key, selected) {
   return `<label class="supply-choice ${selected ? 'checked' : ''}"><input type="checkbox" data-supply-key="${key}" ${selected ? 'checked' : ''}><span class="choice-check">✓</span>${itemImage(item, true)}<span class="choice-copy"><strong>${escapeHtml(item.label)}</strong><small>${key.startsWith('tapas_') ? 'Tapas de marca ' + item.brand : key.startsWith('taper_') ? 'Recipientes de marca ' + item.brand : 'Suministro adicional'}</small></span></label>`;
 }
 function renderManage() {
-  return `<div class="page-stack"><section class="section-block manage-intro"><div class="section-title-row"><div><span class="eyebrow">CONFIGURACIÓN</span><h2>Crear un recipiente</h2><p>No importa si es caja, tacho, bandeja o estante. Escribe el nombre que usa tu personal y marca qué va a guardar.</p></div></div>
+  return `<div class="page-stack"><section class="section-block manage-intro"><div class="section-title-row"><div><span class="eyebrow">CONFIGURACIÓN</span><h2>Crear un recipiente</h2><p>No importa si es caja, tacho, bandeja o estante. Escribe el nombre que usa tu personal y marca qué va a guardar.</p></div><button class="button secondary small" data-action="generate-all-qr" ${state.qrBatchBusy || !state.containers.length ? 'disabled' : ''}>${state.qrBatchBusy ? 'Generando códigos…' : '▦ Generar QR nuevos para todos'}</button></div>
     <div class="form-card"><div class="form-field"><label for="create-name">Nombre del recipiente</label><input id="create-name" data-state-field="createName" value="${escapeHtml(state.createName)}" placeholder="Ej. Bandeja azul, Tacho de tapas, Estante 02" maxlength="70"></div>
     <div class="form-field"><label for="create-description">Descripción (opcional)</label><input id="create-description" data-state-field="createDescription" value="${escapeHtml(state.createDescription)}" placeholder="Ej. Almacén junto a la cocina" maxlength="350"></div>
     <div class="form-field"><label>¿Qué suministros guardará?</label><p class="field-help">Puedes marcar varios. El recipiente solo mostrará los que selecciones.</p><div class="supply-choice-grid">${ITEM_DEFS.map(item => supplyChoice(item.key, state.createKeys.includes(item.key))).join('')}</div></div>
     <div class="form-note"><strong>Importante:</strong> Las tapas Rey y GyG se contarán por separado en la web y en el informe; Supabase conservará el total combinado de tapas para mantener la base actual sin SQL nuevo.</div>
     <button class="button primary create-button" data-action="create-container">＋ Crear recipiente y generar QR</button></div></section>
-    <section class="section-block"><div class="section-title-row"><div><span class="eyebrow">GESTIÓN</span><h2>Recipientes actuales</h2><p>Puedes consultar su QR, cambiar nombre y suministros, o eliminarlos.</p></div></div><div class="container-manage-list">${state.containers.map(container => renderManageCard(container)).join('') || '<div class="empty-state">No hay recipientes registrados.</div>'}</div></section>
+    <section class="section-block"><div class="section-title-row"><div><span class="eyebrow">GESTIÓN</span><h2>Recipientes actuales</h2><p>Puedes consultar su QR, cambiar nombre y suministros, o eliminarlos.</p></div></div><div class="container-manage-list">${state.containers.length ? renderGroupedContainers(state.containers, renderManageCard) : '<div class="empty-state">No hay recipientes registrados.</div>'}</div></section>
   </div>`;
 }
 function renderManageCard(container) {
@@ -356,7 +433,7 @@ function renderMovements() {
   return `<div class="page-stack"><section class="section-block"><div class="section-title-row"><div><span class="eyebrow">HISTORIAL</span><h2>Movimientos recientes</h2><p>Registro automático de cada conteo guardado.</p></div><div class="report-actions"><button class="button secondary small" data-action="pdf-report">⇩ Informe PDF</button><button class="button danger small" data-action="open-clear-history">⌫ Borrar historial</button></div></div><div class="history-safety-note"><strong>Importante:</strong> borrar el historial no modifica las cantidades actuales, los recipientes ni sus códigos QR.</div>${renderMovementRows(state.movements)}</section></div>`;
 }
 function renderProtocol() {
-  return `<div class="page-stack"><section class="section-block"><div class="section-title-row"><div><span class="eyebrow">INSTRUCTIVO</span><h2>Procedimiento administrativo</h2><p>Consulta rápida de las responsabilidades registradas.</p></div></div><div class="protocol-grid">${PROTOCOL.map((line, index) => `<article class="protocol-card"><span>${index + 1}</span><p>${escapeHtml(line)}</p></article>`).join('')}</div></section></div>`;
+  return `<div class="page-stack"><section class="section-block"><div class="section-title-row"><div><span class="eyebrow">INSTRUCTIVO</span><h2>Procedimiento administrativo</h2><p>Consulta rápida de las responsabilidades registradas.</p></div></div><div class="protocol-grid">${PROTOCOL.map((line, index) => `<article class="protocol-card"><span>${index + 1}</span><p>${escapeHtml(line)}</p></article>`).join('')}</div></section>${renderVersionSection()}</div>`;
 }
 function renderDrawer() {
   if (!state.menuOpen) return '';
@@ -367,7 +444,7 @@ function renderDrawer() {
     ['movements', '↻', 'Movimientos', 'Consultar los últimos conteos'],
     ['protocol', '▤', 'Protocolo', 'Procedimiento administrativo']
   ];
-  return `<div class="drawer-backdrop" data-action="close-menu"><aside class="mobile-drawer" role="dialog" aria-modal="true" aria-label="Menú principal"><div class="drawer-head"><div class="brand-lockup"><img src="${BASE}apc-logo.png" alt="APC"><div><strong>APC Inventario</strong><small>Menú principal</small></div></div><button class="icon-button" data-action="close-menu" aria-label="Cerrar menú">×</button></div><p class="drawer-intro">¿A dónde quieres ir?</p><div class="drawer-links">${links.map(([page, icon, title, desc]) => `<button class="drawer-link ${state.page === page ? 'active' : ''}" data-action="navigate" data-page="${page}"><span class="drawer-link-icon">${icon}</span><span><strong>${title}</strong><small>${desc}</small></span><b>›</b></button>`).join('')}</div><div class="drawer-foot"><span class="status-dot ${state.online ? 'online' : 'offline'}"></span>${state.online ? 'Conectado a internet' : 'Sin conexión a internet'}</div></aside></div>`;
+  return `<div class="drawer-backdrop" data-action="close-menu"><aside class="mobile-drawer" role="dialog" aria-modal="true" aria-label="Menú principal"><div class="drawer-head"><div class="brand-lockup"><img src="${BASE}apc-logo.png" alt="APC"><div><strong>APC Inventario</strong><small>Menú principal</small></div></div><button class="icon-button" data-action="close-menu" aria-label="Cerrar menú">×</button></div><p class="drawer-intro">¿A dónde quieres ir?</p><div class="drawer-links">${links.map(([page, icon, title, desc]) => `<button class="drawer-link ${state.page === page ? 'active' : ''}" data-action="navigate" data-page="${page}"><span class="drawer-link-icon">${icon}</span><span><strong>${title}</strong><small>${desc}</small></span><b>›</b></button>`).join('')}</div><div class="drawer-update"><button class="button secondary" data-action="check-updates">↻ Buscar actualización</button><small>Versión web ${WEB_VERSION}</small></div><div class="drawer-foot"><span class="status-dot ${state.online ? 'online' : 'offline'}"></span>${state.online ? 'Conectado a internet' : 'Sin conexión a internet'}</div></aside></div>`;
 }
 function renderMobileNav() {
   if (state.qrMode) return '';
@@ -376,32 +453,75 @@ function renderMobileNav() {
 function render() {
   const title = ({ home: 'Resumen', containers: state.qrMode ? 'Conteo del recipiente' : 'Contenedores', manage: 'Recipientes y QR', movements: 'Movimientos', protocol: 'Protocolo' })[state.page] || 'APC Inventario';
   ROOT.innerHTML = `<div class="app-shell ${state.qrMode ? 'qr-mode' : ''}">
-    <aside class="desktop-sidebar"><button class="brand-lockup brand-home" data-action="home"><img src="${BASE}apc-logo.png" alt="APC"><span><strong>APC Inventario</strong><small>Control de suministros</small></span></button><nav class="desktop-nav"><button data-action="navigate" data-page="home" class="${state.page === 'home' ? 'active' : ''}"><span>⌂</span>Resumen</button><button data-action="navigate" data-page="containers" class="${state.page === 'containers' ? 'active' : ''}"><span>▦</span>Contenedores</button><button data-action="navigate" data-page="movements" class="${state.page === 'movements' ? 'active' : ''}"><span>↻</span>Movimientos</button><button data-action="navigate" data-page="manage" class="${state.page === 'manage' ? 'active' : ''}"><span>▣</span>Recipientes y QR</button><button data-action="navigate" data-page="protocol" class="${state.page === 'protocol' ? 'active' : ''}"><span>▤</span>Protocolo</button></nav><div class="sidebar-tip"><strong>Uso rápido</strong><p>Escanea el QR del recipiente, escribe las cantidades y guarda el conteo.</p></div></aside>
+    <aside class="desktop-sidebar"><button class="brand-lockup brand-home" data-action="home"><img src="${BASE}apc-logo.png" alt="APC"><span><strong>APC Inventario</strong><small>Control de suministros</small></span></button><nav class="desktop-nav"><button data-action="navigate" data-page="home" class="${state.page === 'home' ? 'active' : ''}"><span>⌂</span>Resumen</button><button data-action="navigate" data-page="containers" class="${state.page === 'containers' ? 'active' : ''}"><span>▦</span>Contenedores</button><button data-action="navigate" data-page="movements" class="${state.page === 'movements' ? 'active' : ''}"><span>↻</span>Movimientos</button><button data-action="navigate" data-page="manage" class="${state.page === 'manage' ? 'active' : ''}"><span>▣</span>Recipientes y QR</button><button data-action="navigate" data-page="protocol" class="${state.page === 'protocol' ? 'active' : ''}"><span>▤</span>Protocolo</button></nav><button class="button secondary sidebar-update" data-action="check-updates">↻ Buscar actualización</button><div class="sidebar-tip"><strong>Uso rápido</strong><p>Escanea el QR del recipiente, escribe las cantidades y guarda el conteo.</p></div></aside>
     <div class="mobile-topbar"><button class="brand-lockup brand-home" data-action="home"><img src="${BASE}apc-logo.png" alt="APC"><span><strong>APC Inventario</strong><small>Control de suministros</small></span></button><div class="mobile-header-actions"><span class="connection-pill ${state.online ? 'online' : 'offline'}">● ${state.online ? 'En línea' : 'Sin internet'}</span>${!state.qrMode ? '<button class="icon-button menu-trigger" data-action="open-menu" aria-label="Abrir menú">☰</button>' : '<button class="icon-button" data-action="home" aria-label="Volver al inicio">⌂</button>'}</div></div>
-    <main class="main-area"><header class="page-header"><div><span class="eyebrow">APC CORPORACIÓN</span><h1>${title}</h1></div><div class="header-actions"><span class="connection-pill ${state.online ? 'online' : 'offline'}">● ${state.online ? 'En línea' : 'Sin internet'}</span><button class="icon-button" data-action="refresh" title="Actualizar">↻</button></div></header>
+    <main class="main-area"><header class="page-header"><div><span class="eyebrow">APC CORPORACIÓN</span><h1>${title}</h1></div><div class="header-actions"><span class="connection-pill ${state.online ? 'online' : 'offline'}">● ${state.online ? 'En línea' : 'Sin internet'}</span><button class="icon-button" data-action="refresh" title="Actualizar inventario">↻</button></div></header>
       ${state.loading ? '<div class="loading-card"><span class="spinner"></span><strong>Cargando inventario…</strong></div>' : state.page === 'home' ? renderHome() : state.page === 'containers' ? renderContainersPage() : state.page === 'manage' ? renderManage() : state.page === 'movements' ? renderMovements() : renderProtocol()}
     </main>
-    ${renderMobileNav()}${renderDrawer()}${renderQrModal()}${renderQrHelpModal()}${renderClearHistoryModal()}${state.toast ? `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}
+    ${renderMobileNav()}${renderDrawer()}${renderUpdateNotice()}${renderQrModal()}${renderQrHelpModal()}${renderClearHistoryModal()}${state.toast ? `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}
   </div>`;
 }
 function renderQrModal() {
+  if (state.qrBatchPreview.length) {
+    const cards = state.qrBatchPreview.map(item => `<article class="qr-batch-card"><div class="qr-label"><div class="qr-label-head"><img src="${BASE}apc-logo.png" alt="APC"><div><strong>APC CORPORACIÓN</strong><small>Inventario de suministros</small></div></div><img class="qr-code" src="${qrImageUrl(item.url)}" alt="Código QR de ${escapeHtml(item.name)}"><div class="qr-name">${escapeHtml(item.name.toUpperCase())}</div><div class="qr-instruction">ESCANEAR PARA ACTUALIZAR INVENTARIO</div></div><strong>${escapeHtml(item.name)}</strong></article>`).join('');
+    return `<div class="modal-backdrop" data-action="close-qr"><section class="qr-modal qr-batch-modal" role="dialog" aria-modal="true" aria-label="Nuevos códigos QR" data-stop-close="true"><div class="modal-heading"><div><span class="eyebrow">ETIQUETAS ACTUALIZADAS</span><h2>QR nuevos para todos</h2><p class="qr-batch-subtitle">${state.qrBatchPreview.length} recipientes listos. Los QR anteriores siguen funcionando.</p></div><button class="icon-button" data-action="close-qr" aria-label="Cerrar">×</button></div><div class="qr-batch-list">${cards}</div><div class="qr-actions"><button class="button secondary" data-action="close-qr">Cerrar</button><button class="button primary" data-action="print-qr-batch">▣ Imprimir todos los QR</button></div></section></div>`;
+  }
   if (!state.qrPreview) return '';
   const preview = state.qrPreview;
   const qr = qrImageUrl(preview.url);
-  return `<div class="modal-backdrop" data-action="close-qr"><section class="qr-modal" role="dialog" aria-modal="true" aria-label="Código QR" data-stop-close="true"><div class="modal-heading"><div><span class="eyebrow">ETIQUETA DEL RECIPIENTE</span><h2>${preview.existing ? 'QR existente' : 'QR listo para imprimir'}</h2></div><button class="icon-button" data-action="close-qr" aria-label="Cerrar">×</button></div><div class="qr-label" id="qr-label"><div class="qr-label-head"><img src="${BASE}apc-logo.png" alt="APC"><div><strong>APC CORPORACIÓN</strong><small>Inventario de suministros</small></div></div><img class="qr-code" src="${qr}" alt="Código QR de ${escapeHtml(preview.name)}"><div class="qr-name">${escapeHtml(preview.name.toUpperCase())}</div><div class="qr-instruction">ESCANEAR PARA ACTUALIZAR INVENTARIO</div></div>${preview.existing ? '<p class="qr-safe-note">Este es el mismo acceso guardado para el recipiente. No se ha renovado ni invalidado tu etiqueta impresa.</p>' : ''}<div class="qr-actions"><button class="button secondary" data-action="copy-qr">Copiar enlace</button><button class="button secondary" data-action="open-qr-link">Abrir QR</button><button class="button primary" data-action="print-qr">▣ Imprimir QR</button></div></section></div>`;
+  return `<div class="modal-backdrop" data-action="close-qr"><section class="qr-modal" role="dialog" aria-modal="true" aria-label="Código QR" data-stop-close="true"><div class="modal-heading"><div><span class="eyebrow">ETIQUETA DEL RECIPIENTE</span><h2>${preview.created ? 'Nuevo QR listo para imprimir' : 'QR del recipiente'}</h2></div><button class="icon-button" data-action="close-qr" aria-label="Cerrar">×</button></div><div class="qr-label" id="qr-label"><div class="qr-label-head"><img src="${BASE}apc-logo.png" alt="APC"><div><strong>APC CORPORACIÓN</strong><small>Inventario de suministros</small></div></div><img class="qr-code" src="${qr}" alt="Código QR de ${escapeHtml(preview.name)}"><div class="qr-name">${escapeHtml(preview.name.toUpperCase())}</div><div class="qr-instruction">ESCANEAR PARA ACTUALIZAR INVENTARIO</div></div>${preview.created ? '<p class="qr-warning">Se creó un acceso adicional para este recipiente. Los QR anteriores seguirán funcionando. Puedes imprimir esta etiqueta nueva.</p>' : '<p class="qr-safe-note">Este QR corresponde al acceso activo de este recipiente.</p>'}<div class="qr-actions"><button class="button secondary" data-action="copy-qr">Copiar enlace</button><button class="button secondary" data-action="open-qr-link">Abrir QR</button><button class="button secondary" data-action="renew-qr">Generar otro QR</button><button class="button primary" data-action="print-qr">▣ Imprimir QR</button></div></section></div>`;
 }
 function qrImageUrl(url) { return `https://api.qrserver.com/v1/create-qr-code/?size=900x900&margin=20&data=${encodeURIComponent(url)}`; }
 
-async function openQr(container) {
-  const token = getToken(container.id);
-  if (!token) {
-    state.qrHelpContainerId = container.id;
-    state.qrHelpOpen = true;
+async function ensureContainerToken(container, forceRenew = false) {
+  const cached = getToken(container.id);
+  if (cached && !forceRenew) return { token: cached, created: false };
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { data, error } = await supabase.rpc('apci_issue_container_token', { p_container_id: container.id });
+  if (error) throw error;
+  const row = firstRow(data);
+  const token = row.out_access_token || row.access_token || '';
+  if (!token) throw new Error('Supabase no devolvió el nuevo acceso del recipiente.');
+  saveToken(container.id, token);
+  return { token, created: true };
+}
+
+async function openQr(container, forceRenew = false) {
+  try {
+    if (forceRenew && !confirm(`¿Generar otro QR para ${container.name}? El QR anterior seguirá funcionando; podrás usar esta nueva etiqueta también.`)) return;
+    const result = await ensureContainerToken(container, forceRenew);
+    state.qrPreview = { containerId: container.id, name: container.name, url: getQrUrl(container.id, result.token), created: result.created };
+    state.qrBatchPreview = [];
     render();
-    return;
+    if (result.created) notify(`Nuevo QR generado para ${container.name}.`);
+  } catch (error) {
+    notify(error?.message || 'No se pudo generar el QR.', 'error');
   }
-  state.qrPreview = { containerId: container.id, name: container.name, url: getQrUrl(container.id, token), existing: true };
+}
+
+async function generateAllQr() {
+  if (!state.containers.length) return;
+  if (!confirm(`Se generará un QR adicional para cada uno de los ${state.containers.length} recipientes activos. Los QR actuales seguirán funcionando. ¿Continuar?`)) return;
+  state.qrBatchBusy = true;
   render();
+  const generated = [];
+  try {
+    for (const container of state.containers) {
+      const { token } = await ensureContainerToken(container, true);
+      generated.push({ containerId: container.id, name: container.name, url: getQrUrl(container.id, token) });
+    }
+    state.qrBatchPreview = generated;
+    state.qrPreview = null;
+    state.qrBatchBusy = false;
+    render();
+    notify(`Se generaron ${generated.length} QR nuevos. Puedes imprimir estas etiquetas y conservar las anteriores como respaldo.`);
+  } catch (error) {
+    state.qrBatchBusy = false;
+    state.qrBatchPreview = generated;
+    state.qrPreview = null;
+    render();
+    notify(`Se generaron ${generated.length} de ${state.containers.length} QR. Imprime los que aparecen y vuelve a intentar los restantes. ${error?.message || ''}`, 'error');
+  }
 }
 
 function renderQrHelpModal() {
@@ -413,7 +533,7 @@ function renderQrHelpModal() {
 
 function renderClearHistoryModal() {
   if (!state.clearHistoryOpen) return '';
-  return `<div class="modal-backdrop" data-action="close-clear-history"><section class="qr-modal clear-history-modal" role="dialog" aria-modal="true" aria-label="Eliminar historial completo"><div class="modal-heading"><div><span class="eyebrow">ACCIÓN ADMINISTRATIVA</span><h2>Eliminar todo el historial</h2></div><button class="icon-button" data-action="close-clear-history" aria-label="Cerrar">×</button></div><div class="history-danger-note"><strong>Esta acción no se puede deshacer.</strong><p>Se borrarán todos los movimientos guardados en Supabase, no solo los que aparecen en pantalla. El stock actual, los recipientes y los QR permanecerán intactos.</p></div><div class="form-field"><label for="clear-history-pin">Clave administrativa privada</label><input id="clear-history-pin" type="password" autocomplete="current-password" data-state-field="clearHistoryPin" placeholder="Tu clave privada (12 caracteres o más)"></div><div class="form-field"><label for="clear-history-confirm">Para confirmar, escribe BORRAR HISTORIAL</label><input id="clear-history-confirm" type="text" autocomplete="off" data-state-field="clearHistoryConfirm" placeholder="BORRAR HISTORIAL"></div><div class="qr-actions"><button class="button secondary" data-action="close-clear-history">Cancelar</button><button class="button danger" data-action="clear-history" ${state.clearingHistory ? 'disabled' : ''}>${state.clearingHistory ? 'Eliminando…' : 'Eliminar todo el historial'}</button></div></section></div>`;
+  return `<div class="modal-backdrop" data-action="close-clear-history"><section class="qr-modal clear-history-modal" role="dialog" aria-modal="true" aria-label="Eliminar historial completo"><div class="modal-heading"><div><span class="eyebrow">ACCIÓN ADMINISTRATIVA</span><h2>Eliminar todo el historial</h2></div><button class="icon-button" data-action="close-clear-history" aria-label="Cerrar">×</button></div><div class="history-danger-note"><strong>Esta acción no se puede deshacer.</strong><p>Se borrarán todos los movimientos guardados en Supabase, no solo los que aparecen en pantalla. El stock actual, los recipientes y los QR permanecerán intactos.</p></div><div class="form-field"><label for="clear-history-pin">Clave administrativa privada</label><input id="clear-history-pin" type="password" autocomplete="current-password" data-state-field="clearHistoryPin" placeholder="Clave de 4 dígitos" inputmode="numeric" maxlength="4"></div><div class="form-field"><label for="clear-history-confirm">Para confirmar, escribe BORRAR HISTORIAL</label><input id="clear-history-confirm" type="text" autocomplete="off" data-state-field="clearHistoryConfirm" placeholder="BORRAR HISTORIAL"></div><div class="qr-actions"><button class="button secondary" data-action="close-clear-history">Cancelar</button><button class="button danger" data-action="clear-history" ${state.clearingHistory ? 'disabled' : ''}>${state.clearingHistory ? 'Eliminando…' : 'Eliminar todo el historial'}</button></div></section></div>`;
 }
 async function createContainer() {
   const name = cleanText(state.createName, 70);
@@ -441,7 +561,8 @@ async function createContainer() {
   state.createKeys = [...DEFAULT_CREATE_KEYS];
   await reloadData();
   const current = getContainer(id) || { id, name: savedName };
-  state.qrPreview = { containerId: id, name: current.name || savedName, url: getQrUrl(id, token), existing: false };
+  state.qrPreview = { containerId: id, name: current.name || savedName, url: getQrUrl(id, token), created: true };
+  state.qrBatchPreview = [];
   state.page = 'manage';
   render();
   notify(`${savedName} creado correctamente.`);
@@ -478,23 +599,23 @@ async function deleteContainer(container) {
   notify(`${container.name} eliminado.`);
 }
 async function activateEdit(container) {
-  if (getToken(container.id)) {
+  try {
+    const { created } = await ensureContainerToken(container, false);
     state.selectedContainer = container.id;
     state.showEditor = true;
     state.page = 'containers';
     render();
-    return;
+    if (created) notify(`Edición habilitada para ${container.name}. Puedes imprimir su QR desde el botón del recipiente.`);
+  } catch (error) {
+    notify(error?.message || 'No se pudo habilitar la edición desde esta web.', 'error');
   }
-  state.qrHelpContainerId = container.id;
-  state.qrHelpOpen = true;
-  render();
 }
 
 async function clearAllHistory() {
   const pin = String(state.clearHistoryPin || '').trim();
   const phrase = String(state.clearHistoryConfirm || '').trim();
-  if (pin.length < 12) {
-    notify('La clave administrativa debe tener al menos 12 caracteres.', 'error');
+  if (!/^\d{4}$/.test(pin)) {
+    notify('Escribe la clave de 4 dígitos.', 'error');
     document.getElementById('clear-history-pin')?.focus();
     return;
   }
@@ -512,7 +633,7 @@ async function clearAllHistory() {
   if (error) {
     render();
     if (/apci_clear_all_movements|schema cache|function .*does not exist/i.test(error.message || '')) {
-      notify('Falta instalar la actualización SQL para borrar el historial. Revisa el archivo V8.', 'error');
+      notify('Hace falta ejecutar una sola vez la corrección de la clave 2026 en Supabase.', 'error');
     } else {
       notify(error.message || 'No se pudo borrar el historial.', 'error');
     }
@@ -530,8 +651,11 @@ async function clearAllHistory() {
 async function saveCount(containerId) {
   const container = getContainer(containerId);
   if (!container) return;
-  const token = getToken(containerId);
-  if (!token) { notify('Primero activa el guardado con el QR de este recipiente.', 'error'); return; }
+  let token = getToken(containerId);
+  if (!token) {
+    try { const access = await ensureContainerToken(container, false); token = access.token; }
+    catch (error) { notify(error?.message || 'No se pudo activar la edición de este recipiente.', 'error'); return; }
+  }
   const keys = visibleKeys(container);
   const values = {};
   for (const key of keys) {
@@ -610,13 +734,22 @@ async function reloadData() {
   } catch (error) { notify(error?.message || 'No se pudieron actualizar los datos.', 'error'); }
 }
 
-function openContainer(containerId) {
-  state.selectedContainer = containerId;
-  state.showEditor = true;
-  state.page = 'containers';
-  render();
-  setTimeout(() => document.querySelector('.editor-page')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+async function openContainer(containerId) {
+  const container = getContainer(containerId);
+  if (!container) return;
+  try {
+    const { created } = await ensureContainerToken(container, false);
+    state.selectedContainer = containerId;
+    state.showEditor = true;
+    state.page = 'containers';
+    render();
+    setTimeout(() => document.querySelector('.editor-page')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    if (created) notify(`Ya puedes editar ${container.name} desde esta página. El QR se imprime desde el botón del recipiente.`);
+  } catch (error) {
+    notify(error?.message || 'No se pudo abrir el recipiente para editar.', 'error');
+  }
 }
+
 function goHome() {
   state.qrMode = false;
   state.qrContainerId = '';
@@ -674,6 +807,20 @@ function shareWhatsApp() {
   lines.push('━━━━━━━━━━━━━━━━━━━━', '_Reporte generado desde APC Inventario._');
   window.open(`https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`, '_blank', 'noopener');
 }
+function printQrBatch() {
+  const items = state.qrBatchPreview;
+  if (!items.length) return;
+  const w = window.open('', '_blank');
+  if (!w) { notify('Permite las ventanas emergentes para imprimir los QR.', 'error'); return; }
+  const pages = [];
+  for (let i = 0; i < items.length; i += 4) {
+    const labels = items.slice(i, i + 4).map(item => `<section class="label"><div class="head"><img src="${location.origin}${BASE}apc-logo.png"><div><strong>APC CORPORACIÓN</strong><small>Inventario de suministros</small></div></div><img class="qr" src="${qrImageUrl(item.url)}" alt="QR ${escapeHtml(item.name)}"><div class="name">${escapeHtml(item.name.toUpperCase())}</div><div class="instruction">ESCANEAR PARA ACTUALIZAR INVENTARIO</div></section>`).join('');
+    pages.push(`<main class="page"><div class="grid">${labels}</div></main>`);
+  }
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QR APC - Todos los recipientes</title><style>*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif}.page{height:281mm;padding:0;break-after:page}.page:last-child{break-after:auto}.grid{height:100%;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6mm}.label{min-width:0;min-height:0;border:1.5mm solid #173d63;border-radius:7mm;padding:5mm 4mm 4mm;text-align:center;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:space-between;break-inside:avoid}.head{display:flex;align-items:center;justify-content:center;gap:3mm}.head img{width:14mm;height:14mm;object-fit:contain}.head strong{display:block;color:#173d63;font-size:12pt}.head small{display:block;color:#71808d;font-size:7pt}.qr{display:block;width:52mm;height:52mm;object-fit:contain;margin:1mm auto}.name{width:100%;margin:1mm auto;background:#f47c22;color:#fff;border-radius:3mm;padding:3mm 1mm;font-size:17pt;font-weight:900;letter-spacing:.5px}.instruction{font-size:7pt;font-weight:900;color:#263648;letter-spacing:.2px}@page{size:A4 portrait;margin:8mm}@media print{.page{height:281mm}}</style></head><body>${pages.join('')}<script>const imgs=[...document.images];Promise.all(imgs.map(i=>i.decode?i.decode().catch(()=>{}):Promise.resolve())).then(()=>setTimeout(()=>window.print(),350));</script></body></html>`);
+  w.document.close();
+}
+
 function printQrLabel() {
   const preview = state.qrPreview;
   if (!preview) return;
@@ -703,13 +850,17 @@ ROOT.addEventListener('click', async event => {
   if (action === 'go-containers') { navigate('containers'); return; }
   if (action === 'go-manage') { navigate('manage'); return; }
   if (action === 'go-movements') { navigate('movements'); return; }
-  if (action === 'open-container') { openContainer(id); return; }
+  if (action === 'open-container') { await openContainer(id); return; }
   if (action === 'back-containers') { state.showEditor = false; state.selectedContainer = ''; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   if (action === 'refresh') { await reloadData(); notify('Inventario actualizado.'); return; }
+  if (action === 'check-updates') { await checkUpdates(true); return; }
+  if (action === 'later-update') { state.updateDismissed = true; render(); return; }
+  if (action === 'apply-update') { await applyWebUpdate(); return; }
   if (action === 'create-container') { await createContainer(); return; }
   if (action === 'save-count') { await saveCount(id); return; }
   if (action === 'activate-edit') { const container = getContainer(id); if (container) await activateEdit(container); return; }
   if (action === 'show-qr') { const container = getContainer(id); if (container) await openQr(container); return; }
+  if (action === 'generate-all-qr') { await generateAllQr(); return; }
   if (action === 'open-clear-history') { state.clearHistoryPin = ''; state.clearHistoryConfirm = ''; state.clearHistoryOpen = true; render(); return; }
   if (action === 'close-clear-history') { if (event.target.closest('.clear-history-modal') && !event.target.closest('[data-action="close-clear-history"]')) return; state.clearHistoryOpen = false; state.clearHistoryPin = ''; state.clearHistoryConfirm = ''; render(); return; }
   if (action === 'clear-history') { await clearAllHistory(); return; }
@@ -724,9 +875,11 @@ ROOT.addEventListener('click', async event => {
   if (action === 'cancel-edit') { state.editContainerId = ''; render(); return; }
   if (action === 'save-edit') { await saveContainerEdit(id); return; }
   if (action === 'delete-container') { const container = getContainer(id); if (container) await deleteContainer(container); return; }
-  if (action === 'close-qr') { if (event.target.closest('.qr-modal') && !event.target.closest('.modal-heading [data-action="close-qr"]')) return; state.qrPreview = null; render(); return; }
+  if (action === 'close-qr') { if (event.target.closest('.qr-modal') && !event.target.closest('.modal-heading [data-action="close-qr"]') && !event.target.closest('.qr-actions [data-action="close-qr"]')) return; state.qrPreview = null; state.qrBatchPreview = []; render(); return; }
   if (action === 'copy-qr') { try { await navigator.clipboard.writeText(state.qrPreview.url); notify('Enlace copiado.'); } catch { notify('No se pudo copiar el enlace.', 'error'); } return; }
   if (action === 'open-qr-link') { window.open(state.qrPreview.url, '_blank', 'noopener'); return; }
+  if (action === 'renew-qr') { const container = getContainer(state.qrPreview?.containerId); if (container) await openQr(container, true); return; }
+  if (action === 'print-qr-batch') { printQrBatch(); return; }
   if (action === 'print-qr') { printQrLabel(); return; }
   if (action === 'pdf-report') { printReport(); return; }
   if (action === 'whatsapp') { shareWhatsApp(); return; }
@@ -769,5 +922,6 @@ if (supabase) {
 }
 if (state.qrMode) saveToken(state.qrContainerId, initialToken);
 initialize();
+if (!state.qrMode) setTimeout(() => checkUpdates(false), 1100);
 
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register(`${BASE}sw.js`).catch(() => undefined)); }

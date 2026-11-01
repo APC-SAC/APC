@@ -146,3 +146,101 @@ button:focus-visible,input:focus-visible{outline:3px solid rgba(21,150,107,.25);
   .qr-help-modal .modal-heading h2,.clear-history-modal .modal-heading h2{font-size:20px}
   .clear-history-modal .qr-actions{display:grid;grid-template-columns:1fr}
 }
+
+
+/* V9 — edición web directa y renovación ordenada de etiquetas QR */
+.editor-qr-button{margin-top:12px;min-height:40px}
+.manage-intro .section-title-row{align-items:flex-end}
+.manage-intro .section-title-row>button{flex:0 0 auto}
+.qr-batch-modal{width:min(100%,900px)}
+.qr-batch-subtitle{margin:6px 0 0;color:#6e8190;font-size:12px;line-height:1.45}
+.qr-batch-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;max-height:min(62dvh,680px);overflow:auto;padding:2px 3px 8px}
+.qr-batch-card{display:grid;gap:7px;min-width:0}
+.qr-batch-card>strong{font-size:12px;color:#536c7d;text-align:center}
+.qr-batch-card .qr-label{width:100%;padding:11px 9px 10px;border-width:4px;border-radius:17px}
+.qr-batch-card .qr-label-head{gap:7px;margin-bottom:5px}
+.qr-batch-card .qr-label-head img{width:38px;height:34px}
+.qr-batch-card .qr-label-head strong{font-size:12px}
+.qr-batch-card .qr-label-head small{font-size:8px}
+.qr-batch-card .qr-code{width:min(100%,170px);height:auto}
+.qr-batch-card .qr-name{max-width:100%;margin:6px auto 5px;padding:8px 5px;font-size:17px}
+.qr-batch-card .qr-instruction{font-size:8px}
+@media(max-width:600px){
+  .manage-intro .section-title-row{align-items:stretch}
+  .manage-intro .section-title-row>button{width:100%;min-height:46px}
+  .qr-batch-modal{padding:15px}
+  .qr-batch-list{grid-template-columns:1fr;max-height:58dvh;gap:12px}
+  .qr-batch-card .qr-label{max-width:320px;margin:0 auto}
+  .qr-batch-card .qr-code{width:min(100%,190px)}
+  .qr-batch-modal .qr-actions{display:grid;grid-template-columns:1fr}
+  .qr-batch-modal .qr-actions .button{min-height:48px}
+  .editor-qr-button{width:100%}
+}
+
+/* APC V10 · navegación clara, recipientes agrupados y conteo primero */
+.inventory-groups{display:grid;grid-template-columns:1fr;gap:15px;width:100%}
+.inventory-group{min-width:0;overflow:hidden;background:#f8fafc;border:1px solid #d9e6ed;border-radius:21px;box-shadow:0 6px 16px rgba(20,58,99,.035)}
+.inventory-group>summary{cursor:pointer;display:flex;align-items:center;gap:13px;list-style:none;padding:17px 19px;background:linear-gradient(115deg,#f3f9fb,#fff);color:#143a63;user-select:none}
+.inventory-group>summary::-webkit-details-marker{display:none}
+.inventory-group[open]>summary{border-bottom:1px solid #dde9ed}
+.group-symbol{width:47px;height:47px;display:grid;place-items:center;background:#e4f0f4;border-radius:14px;font-size:23px;flex-shrink:0;color:#17618a}
+.group-label{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+.group-label strong{font-size:19px;font-weight:850;line-height:1.18}.group-label small{font-size:12px;font-weight:500;color:#6d8493}
+.group-count{width:36px;height:36px;display:grid;place-items:center;background:#e1f2eb;color:#087c54;border-radius:12px;font-size:16px;font-weight:850}
+.group-chevron{font-size:26px;line-height:1;color:#567d8e;transition:transform .15s}
+.inventory-group[open] .group-chevron{transform:rotate(180deg)}
+.inventory-group>.container-list{padding:15px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.container-manage-list .inventory-group>.container-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+.container-list:has(>.inventory-groups),.container-manage-list:has(>.inventory-groups){display:block}
+.button{transition:transform .14s ease,box-shadow .15s ease,border-color .15s ease}
+.button:active{transform:scale(.985)}
+.big-report-actions{gap:12px}
+.big-report-actions .button{font-size:14px;font-weight:850;min-height:54px;padding:12px 18px;border-radius:16px;border-width:1.5px;box-shadow:0 5px 14px rgba(19,55,86,.055)}
+.big-report-actions .report-pdf{background:#eef5fc;border-color:#c9daeb;color:#194f7b}
+.big-report-actions .report-whatsapp{background:#e7f8ef;border-color:#b7e6c9;color:#087848}
+.big-report-actions .button-icon{display:inline-grid;place-items:center;width:29px;height:29px;background:#fff;border-radius:9px;font-size:21px;line-height:1}
+.editor-compact-head{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:6px 3px 0}
+.editor-compact-head .back-link{flex-basis:100%;margin-bottom:0}
+.editor-compact-head h2{font-size:30px;font-weight:850;color:#163d63;margin:2px 0 0}
+.editor-top-total{margin-left:auto;border-radius:15px;padding:10px 16px;background:#eaf6f1;color:#11805a;font-size:28px;font-weight:850}
+.editor-top-total small{font-size:11px;font-weight:750}
+.step-tag{display:inline-flex;background:#e6f4ed;border:1px solid #c6e9d7;border-radius:999px;padding:6px 12px;color:#096b4b;font-size:11px;font-weight:850;letter-spacing:.8px}
+.step-first .count-section{border:2px solid #d1e9dd}
+.step-first .count-section>.section-title-row h2{margin-top:8px}
+.step-first .product-grid .product-card{background:#fff}
+.step-first .product-pick{cursor:pointer}
+.step-first .quantity-input{border:2px solid #c9dfe3;font-weight:850}
+.step-first .quantity-input:focus{border-color:#15966b;box-shadow:0 0 0 4px rgba(21,150,107,.13)}
+.editor-info-bottom{background:#f7fafc;border-style:dashed;box-shadow:none}
+.update-settings{background:#f7fbff;border:1px solid #dce8f3;border-radius:20px;padding:20px}
+.update-settings h3{margin:7px 0;color:var(--navy);font-size:22px}.update-settings p{font-size:14px;color:#677f91}
+.update-button,.sidebar-update{min-height:48px;font-size:14px}
+.sidebar-update{margin:6px 15px;width:calc(100% - 30px)}
+.drawer-update{display:flex;flex-direction:column;gap:8px;padding:5px}.drawer-update .button{width:100%;min-height:50px;font-weight:800}.drawer-update small{text-align:center;color:#718391}
+.version-backdrop{position:fixed;inset:0;z-index:250;background:rgba(9,24,39,.6);display:grid;place-items:center;padding:20px}
+.version-dialog{background:white;padding:27px 24px;border-radius:28px;box-shadow:0 25px 90px rgba(0,0,0,.22);width:min(100%,440px);text-align:center}
+.version-icon{display:grid;place-items:center;width:76px;height:76px;margin:0 auto 12px;border-radius:24px;background:#e0f6eb;color:#0c8e63;font-size:45px}
+.version-dialog h2{margin:0;color:#143a63;font-size:26px}.version-dialog p{font-size:15px;color:#687f8e;line-height:1.55}
+.version-buttons{display:grid;grid-template-columns:1fr 1.2fr;gap:10px;margin-top:17px}.version-buttons .button{min-height:54px}
+@media(max-width:1100px){.inventory-group>.container-list,.container-manage-list .inventory-group>.container-list{grid-template-columns:1fr}}
+@media(max-width:860px){
+ .inventory-groups{gap:12px}.inventory-group{border-radius:20px}
+ .inventory-group>summary{padding:14px}.group-symbol{width:44px;height:44px;font-size:23px}.group-label strong{font-size:18px}.group-label small{font-size:11px}.group-count{width:33px;height:33px}
+ .inventory-group>.container-list,.container-manage-list .inventory-group>.container-list{padding:11px;grid-template-columns:1fr}
+ .big-report-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+ .big-report-actions .button{min-width:0;font-size:13px;line-height:1.2;min-height:61px;padding:8px;border-radius:15px;white-space:normal}
+ .big-report-actions .button-icon{width:29px;height:29px;flex-shrink:0}
+ .editor-compact-head{padding:0 2px}.editor-compact-head h2{font-size:25px}.editor-top-total{padding:8px 12px;font-size:24px}
+ .step-first .count-section{padding:13px}.step-first .product-card{padding:14px}
+ .step-first .product-pick .product-image{width:130px;height:128px}.step-first .product-pick{grid-template-columns:130px minmax(0,1fr) 22px;gap:12px}
+ .step-first .quantity-input{height:71px;font-size:36px}
+ .step-first .save-button{min-height:60px;font-size:17px;box-shadow:0 8px 18px rgba(17,151,101,.18)}
+ .mobile-bottom-nav button{min-height:59px}.mobile-bottom-nav button small{font-size:11px}
+ .container-tile-actions .button{min-height:47px;font-size:13px}
+ .drawer-update{padding:3px}.drawer-update .button{font-size:15px}
+}
+@media(max-width:390px){
+ .step-first .product-pick .product-image{width:109px;height:112px}.step-first .product-pick{grid-template-columns:109px minmax(0,1fr) 20px;gap:10px}
+ .big-report-actions .button{font-size:12px}.editor-top-total{font-size:21px}
+}
+@media(max-width:860px){.mobile-topbar .menu-trigger{display:none}.mobile-topbar{min-height:66px}}
