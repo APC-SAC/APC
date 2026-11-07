@@ -16,7 +16,7 @@ const CACHE_KEY = 'apc_inventory_stock_v7';
 const CONTAINERS_CACHE_KEY = 'apc_inventory_containers_v7';
 const QUEUE_KEY = 'apc_inventory_pending_v7';
 const MAX_QTY = 100000;
-const WEB_VERSION = '15.0.0';
+const WEB_VERSION = '16.0.0';
 const UPDATE_URL = `${BASE}version.json`;
 
 const DB_KEYS = ['taper_rey', 'taper_gyg', 'tapas', 'tenedores'];
@@ -436,7 +436,7 @@ function renderEditor(container, qrMode) {
     </div>
     <section class="section-block count-section">
       <div class="section-title-row"><div><span class="step-tag">PASO 1 · CONTAR</span><h2>Escribe lo que tienes ahora</h2><p>Toca la foto del producto o el número y escribe la cantidad física.</p></div></div>
-      <div class="count-content-tool"><div><strong>Contenido de este recipiente</strong><small>${escapeHtml(contentsLabel(container))}</small></div><button type="button" class="button change-content-action small" data-action="change-content" data-id="${escapeHtml(container.id)}">✎ Cambiar contenido</button></div>
+      <div class="count-content-tool"><div><strong>Contenido de este recipiente</strong><small>${escapeHtml(contentsLabel(container))} · Puedes agregar más tipos sin quitar los actuales</small></div><button type="button" class="button change-content-action small" data-action="change-content" data-id="${escapeHtml(container.id)}">✎ Cambiar contenido</button></div>
       <div class="product-grid">${content || '<div class="empty-state">Este recipiente no tiene suministros asignados.</div>'}</div>
       <div class="save-bar"><div><span class="step-tag">PASO 2 · GUARDAR</span><strong>¿Terminaste de contar?</strong><small>Guarda las cantidades registradas.</small></div><button class="button primary save-button" data-action="save-count" data-id="${escapeHtml(container.id)}" ${state.saving ? 'disabled' : ''}>${state.saving ? 'Guardando…' : '✓ Guardar conteo'}</button></div>
     </section>
@@ -698,9 +698,8 @@ function quantityPlanForContent(container, newKeys) {
 async function saveContentEditor(newKeys) {
   const container = getContainer(state.contentEditContainerId);
   if (!container || state.contentEditSaving) return;
-  const allowed = categoryOf(container) === 'Cajas'
-    ? ['taper_rey', 'taper_gyg']
-    : ITEM_DEFS.map(item => item.key);
+  // Todos los recipientes pueden contener cualquier combinación de suministros.
+  const allowed = ITEM_DEFS.map(item => item.key);
   const keys = [...new Set(newKeys)].filter(key => allowed.includes(key));
   if (!keys.length) { notify('Selecciona al menos un tipo de suministro.', 'error'); return; }
   if (keys.length !== new Set(newKeys).size) { notify('Hay suministros no permitidos para este recipiente.', 'error'); return; }
@@ -739,7 +738,10 @@ async function saveContentEditor(newKeys) {
     state.contentEditKeys = [];
     state.drafts = {}; // El próximo conteo mostrará los nuevos tipos y sus cantidades.
     await reloadData();
-    notify(`Contenido actualizado en ${container.name}. Los códigos QR anteriores siguen funcionando.`);
+    const added = keys.filter(key => !visibleKeys(container).includes(key));
+    notify(added.length
+      ? `Contenido guardado. Ya puedes contar ${added.map(key => getItem(key)?.label || key).join(', ')} en ${container.name}. El QR no cambia.`
+      : `Contenido actualizado en ${container.name}. Los códigos QR anteriores siguen funcionando.`);
   } catch (error) {
     const message = String(error?.message || 'No se pudo cambiar el contenido.');
     const isMissing = /apci_change_container_contents_v15|schema cache|could not find the function|does not exist/i.test(message);
@@ -759,7 +761,8 @@ function mountReactContentEditor() {
     if (generation !== contentReactGeneration || !state.contentEditOpen || !target.isConnected) return;
     const container = getContainer(state.contentEditContainerId);
     if (!container) return;
-    const allowed = categoryOf(container) === 'Cajas' ? ['taper_rey','taper_gyg'] : ITEM_DEFS.map(item=>item.key);
+    // No limitar las cajas a tápers: también pueden almacenar tapas y tenedores.
+    const allowed = ITEM_DEFS.map(item => item.key);
     contentReactCleanup = mountContentEditor(target, {
       name: container.name,
       allowed,

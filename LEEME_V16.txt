@@ -1,0 +1,28 @@
+APC INVENTARIO — ACTUALIZACIÓN WEB V16
+
+QUÉ CAMBIÓ:
+- Ahora cualquier recipiente, incluidas las cajas, permite incluir todos los tipos:
+  tápers Rey, tápers GyG, tapas Rey, tapas GyG y tenedores.
+- Dentro de "Cambiar contenido" hay dos secciones claras:
+  "Suministros que ya contiene" y "Agregar otro suministro".
+- Pulsa "+ Agregar" en Tenedores para añadirlo sin quitar los tápers.
+- Pulsa "Quitar" si deseas eliminar un tipo. Si tiene unidades,
+  la aplicación pide confirmación antes de llevarlo a 0.
+- Después de guardar, el nuevo tipo aparece en el conteo para anotar su cantidad.
+- Se conservan el diseño general, el inventario y los QR existentes.
+
+INSTALACIÓN:
+1. Extrae el ZIP.
+2. Entra a GitHub: APC-SAC/APC.
+3. Sube todos los archivos internos a la raíz del repositorio (reemplaza los anteriores).
+4. Confirma "Commit changes".
+5. En el móvil, abre APC Inventario y actualiza/recarga su web.
+
+SUPABASE:
+No se requiere SQL nuevo SI ya ejecutaste correctamente el SQL de la V15:
+APC_INVENTARIO_V15_CAMBIO_CONTENIDO.sql
+Ese procedimiento ya acepta los 5 tipos en cualquier recipiente.
+
+NOTA DE SEGURIDAD:
+El sistema no requiere iniciar sesión: cualquier persona con un QR activo
+podría modificar los conteos. No difundas los QR fuera del equipo autorizado.

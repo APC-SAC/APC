@@ -1,6 +1,6 @@
 {
-  "web_version": "15.0.0",
+  "web_version": "16.0.0",
   "android_version": "1.3.0",
   "apk_url": "https://github.com/APC-SAC/APC/releases/latest/download/APC-Inventario.apk",
-  "release_notes": "Web V15: WhatsApp sin productos en cero y edición rápida de contenido por recipiente. Sin cambios en QR ni datos existentes."
+  "release_notes": "Web V16: añadir o quitar tápers, tapas y tenedores en cualquier recipiente, incluidas las cajas. Se conservan QR y stock existente."
 }

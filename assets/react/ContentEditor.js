@@ -1,67 +1,95 @@
-// APC Inventario V15 · Editor React de contenidos por recipiente.
-// React 18 se importa por importmap desde index.html; no requiere npm ni compilar.
+// APC Inventario V16 · React 18. Todos los tipos permitidos en cualquier recipiente.
+// React se carga mediante importmap en index.html (sin pasos de npm/build).
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 const h = React.createElement;
-const GROUPS = [
-  { id: 'tapers', name: 'Solo tápers', keys: ['taper_rey','taper_gyg'], icon: '▣' },
-  { id: 'tapas', name: 'Solo tapas', keys: ['tapas_rey','tapas_gyg'], icon: '▰' },
-  { id: 'tapers_tapas', name: 'Tápers + tapas', keys: ['taper_rey','taper_gyg','tapas_rey','tapas_gyg'], icon: '▣' },
-  { id: 'tenedores', name: 'Solo tenedores', keys: ['tenedores'], icon: '⑂' }
+const PRESETS = [
+  { id: 'tapers', label: 'Solo tápers', keys: ['taper_rey', 'taper_gyg'] },
+  { id: 'tapas', label: 'Solo tapas', keys: ['tapas_rey', 'tapas_gyg'] },
+  { id: 'tapers_tapas', label: 'Tápers y tapas', keys: ['taper_rey', 'taper_gyg', 'tapas_rey', 'tapas_gyg'] },
+  { id: 'tenedores', label: 'Solo tenedores', keys: ['tenedores'] },
+  { id: 'all', label: 'Todos los suministros', keys: ['taper_rey', 'taper_gyg', 'tapas_rey', 'tapas_gyg', 'tenedores'] }
 ];
+
+function ProductRow({ item, selected, busy, onToggle }) {
+  return h('article', { className: `content-product-row ${selected ? 'content-product-selected' : 'content-product-add'}`, 'data-product-key': item.key },
+    h('img', { src: item.image, alt: item.alt || item.label, loading: 'lazy', referrerPolicy: 'no-referrer' }),
+    h('div', { className: 'content-product-copy' },
+      h('strong', null, item.label),
+      h('small', null, selected
+        ? `Registrado: ${Number(item.quantity || 0).toLocaleString('es-PE')} unidades`
+        : 'Disponible para agregar a este recipiente')),
+    h('button', {
+      type: 'button',
+      className: `content-product-button ${selected ? 'remove' : 'add'}`,
+      disabled: busy,
+      onClick: onToggle,
+      'aria-label': `${selected ? 'Quitar' : 'Agregar'} ${item.label}`
+    }, selected ? 'Quitar' : '+ Agregar'));
+}
 
 function ContentEditor({ name, items, allowed, selectedKeys, busy, onClose, onSave, onSelectionChange }) {
   const [selected, setSelected] = useState(() => [...selectedKeys]);
   const allowedSet = new Set(allowed);
-  const set = (next) => {
-    const cleaned = [...new Set(next)].filter(key => allowedSet.has(key));
-    setSelected(cleaned);
-    onSelectionChange(cleaned);
+  const set = (keys) => {
+    const next = [...new Set(keys)].filter(key => allowedSet.has(key));
+    setSelected(next);
+    onSelectionChange?.(next);
   };
-  const presets = GROUPS.filter(preset => preset.keys.every(key => allowedSet.has(key)));
-  const selectedPreset = presets.find(preset => preset.keys.length === selected.length && preset.keys.every(key => selected.includes(key)))?.id || '';
-  const heading = h('header', { className: 'content-modal-header' },
-    h('div', { className: 'content-modal-title' },
-      h('span', { className: 'eyebrow' }, 'CONFIGURAR RECIPIENTE'),
-      h('h2', null, 'Cambiar contenido'),
-      h('p', null, 'Elige qué vas a guardar en ', h('strong', null, name), '.')),
-    h('button', { type:'button', className: 'content-close', onClick:onClose, 'aria-label': 'Cerrar', disabled:busy }, '×'));
-  const presetsBlock = h('div', { className:'content-presets', role:'group', 'aria-label':'Selección rápida de suministros' },
-    h('div', { className:'content-title-line' }, 'Selecciona una opción rápida'),
-    h('div', { className:'content-presets-grid' }, presets.map(preset =>
-      h('button', {
-        key:preset.id, type:'button', disabled:busy,
-        'aria-pressed':selectedPreset === preset.id,
-        className: `content-preset ${selectedPreset===preset.id ? 'active' : ''}`,
-        onClick:()=>set(preset.keys)
-      }, h('span', { className:'content-preset-icon' }, preset.icon), h('span',null,preset.name), h('span',{className:'preset-check'}, selectedPreset===preset.id ? '✓' : '')))));
-  const choices = h('div',{className:'content-choices'},
-    h('div',{className:'content-title-line'}, 'O personaliza por marca'),
-    h('p',{className:'content-subtitle'},'Marca o desmarca cada tipo. Puedes combinar varios.'),
-    h('div',{className:'content-grid'}, items.map(item =>
-      h('label', { key:item.key, className:`content-choice ${selected.includes(item.key) ? 'is-active' : ''}` },
-        h('input',{type:'checkbox', checked:selected.includes(item.key), disabled:busy,
-          onChange:e => set(e.target.checked ? [...selected,item.key] : selected.filter(key=>key!==item.key))}),
-        h('img',{ src:item.image, alt:item.alt, loading:'lazy', referrerPolicy:'no-referrer' }),
-        h('span',{className:'content-choice-desc'}, h('strong',null,item.label),
-          h('small',null,'Registrado: ',Number(item.quantity).toLocaleString('es-PE'))),
-        h('span',{className:'content-choice-check','aria-hidden':'true'},selected.includes(item.key)?'✓':'+')))));
-  return h('section',{className:'content-change-modal',role:'dialog','aria-modal':'true','aria-label':'Cambiar contenido del recipiente'},
-    heading,
-    h('div',{className:'content-change-body'},
-      presetsBlock, choices,
-      h('div',{className:'content-keep-note'},
-        h('strong',null,'Importante: '),
-        'Los productos que mantengas conservarán su cantidad. Los que quites pasarán a 0 y quedará registrado en el historial. Los que agregues comenzarán en 0. No se modifica tu QR.')),
-    h('footer',{className:'content-modal-footer'},
-      h('button',{type:'button',className:'button secondary',disabled:busy,onClick:onClose},'Cancelar'),
-      h('button',{type:'button',className:'button primary',disabled:busy||!selected.length,onClick:()=>onSave(selected)}, busy?'Guardando…':'✓ Guardar contenido')));
+  const included = items.filter(item => selected.includes(item.key));
+  const available = items.filter(item => !selected.includes(item.key));
+  const toggle = (key) => set(selected.includes(key) ? selected.filter(value => value !== key) : [...selected, key]);
+
+  return h('section', { className: 'content-change-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': `Editar suministros de ${name}` },
+    h('header', { className: 'content-modal-header' },
+      h('div', { className: 'content-modal-title' },
+        h('span', { className: 'eyebrow' }, 'CONFIGURAR RECIPIENTE'),
+        h('h2', null, 'Agregar o quitar suministros'),
+        h('p', null, 'En ', h('strong', null, name), ' puedes combinar tápers, tapas y tenedores.')),
+      h('button', { type: 'button', className: 'content-close', onClick: onClose, 'aria-label': 'Cerrar', disabled: busy }, '×')),
+
+    h('div', { className: 'content-change-body' },
+      h('div', { className: 'content-simple-tip' },
+        h('strong', null, '¿Necesitas poner tenedores?'),
+        h('span', null, 'Busca «Tenedores» y pulsa «+ Agregar». No tienes que quitar los tápers que ya guardaste.')),
+
+      h('section', { className: 'content-products-section' },
+        h('div', { className: 'content-section-head' },
+          h('h3', null, 'Suministros que ya contiene'),
+          h('span', { className: 'content-counter' }, String(included.length))),
+        included.length
+          ? h('div', { className: 'content-products-list' }, included.map(item =>
+              h(ProductRow, { key: item.key, item, selected: true, busy, onToggle: () => toggle(item.key) })))
+          : h('p', { className: 'content-empty-msg' }, 'Aún no hay suministros seleccionados. Agrega al menos uno de la lista de abajo.')),
+
+      h('section', { className: 'content-products-section' },
+        h('div', { className: 'content-section-head' },
+          h('h3', null, 'Agregar otro suministro'),
+          h('span', { className: 'content-counter' }, String(available.length))),
+        available.length
+          ? h('div', { className: 'content-products-list' }, available.map(item =>
+              h(ProductRow, { key: item.key, item, selected: false, busy, onToggle: () => toggle(item.key) })))
+          : h('p', { className: 'content-empty-msg' }, 'Ya tienes disponibles todos los suministros.')),
+
+      h('details', { className: 'content-preset-details' },
+        h('summary', null, 'Opciones rápidas para reemplazar la selección'),
+        h('p', null, 'Úsalas solo si quieres cambiar todos los tipos que almacena este recipiente.'),
+        h('div', { className: 'content-preset-buttons' }, PRESETS.filter(preset => preset.keys.every(key => allowedSet.has(key))).map(preset =>
+          h('button', { key: preset.id, type: 'button', className: 'content-preset-mini', disabled: busy, onClick: () => set(preset.keys) }, preset.label)))),
+
+      h('div', { className: 'content-keep-note' },
+        h('strong', null, 'Tu stock se mantiene. '),
+        'Agregar un producto no elimina lo que ya tienes. Si quitas un producto que tiene unidades registradas, la web te pedirá confirmación antes de ponerlo en cero. El QR no cambia.')),
+
+    h('footer', { className: 'content-modal-footer' },
+      h('button', { type: 'button', className: 'button secondary', disabled: busy, onClick: onClose }, 'Cancelar'),
+      h('button', { type: 'button', className: 'button primary', disabled: busy || !selected.length, onClick: () => onSave(selected) },
+        busy ? 'Guardando…' : '✓ Guardar cambios')));
 }
 
-/** Monta el componente React de verdad y devuelve una función para desmontarlo. */
 export function mountContentEditor(node, props) {
-  const root=createRoot(node);
+  const root = createRoot(node);
   root.render(h(ContentEditor, props));
-  return ()=>root.unmount();
+  return () => root.unmount();
 }

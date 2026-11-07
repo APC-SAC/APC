@@ -429,3 +429,42 @@ button:focus-visible,input:focus-visible{outline:3px solid rgba(21,150,107,.25);
  .count-content-tool{align-items:stretch;flex-direction:column}
  .count-content-tool>.button{width:100%;font-size:13px}
 }
+
+/* APC V16 · Añadir/quitar suministros en todos los recipientes (móvil primero) */
+.content-modal-title p{font-size:14px;line-height:1.55}
+.content-change-body{gap:17px}
+.content-simple-tip{display:grid;gap:5px;background:#ebf8f2;border:1px solid #c3e9d8;padding:14px 16px;border-radius:15px;color:#174b38;font-size:13px;line-height:1.5}
+.content-simple-tip strong{font-size:15px}
+.content-products-section{display:grid;gap:10px}
+.content-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.content-section-head h3{margin:0;font-size:16px;letter-spacing:-.2px;color:var(--navy)}
+.content-counter{display:grid;place-items:center;min-width:28px;height:28px;border-radius:99px;background:#e9f2f5;color:#195071;font-weight:800;font-size:12px}
+.content-products-list{display:grid;gap:10px}
+.content-product-row{display:flex;align-items:center;gap:12px;min-width:0;padding:11px 13px;border:1.5px solid #e2ebed;border-radius:16px;background:#fff}
+.content-product-row.content-product-selected{border-color:#bfe6d3;background:#f6fcf9}
+.content-product-row.content-product-add{border-color:#d5e5ef;background:#f9fcfe}
+.content-product-row img{width:70px;height:70px;flex:0 0 70px;border-radius:12px;background:#fff;object-fit:contain;border:1px solid #eaf0f3}
+.content-product-copy{display:grid;gap:4px;flex:1;min-width:0}
+.content-product-copy strong{font-size:15px;line-height:1.3;color:var(--navy)}
+.content-product-copy small{font-size:12px;line-height:1.45;color:#6f828c}
+.content-product-button{flex:0 0 auto;min-width:100px;min-height:44px;padding:10px 13px;border-radius:12px;border:1px solid;cursor:pointer;font-size:13px;font-weight:850}
+.content-product-button.add{background:#15966b;border-color:#15966b;color:#fff}
+.content-product-button.remove{background:#fff;border-color:#e3d1cb;color:#92503f}
+.content-product-button:disabled{opacity:.5;cursor:default}
+.content-preset-details{border-radius:15px;border:1px solid #e1e9ef;background:#f8fafb;padding:13px 15px}
+.content-preset-details summary{cursor:pointer;color:#1a3e5f;font-size:13px;font-weight:800}
+.content-preset-details p{font-size:12px;color:#6a7e89;line-height:1.5;margin:10px 0}
+.content-preset-buttons{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.content-preset-mini{padding:9px 12px;border-radius:10px;background:#fff;border:1px solid #cbdde7;color:#204761;font-size:12px;font-weight:800;cursor:pointer}
+.content-empty-msg{color:#688190;font-size:13px;margin:0;padding:14px;border:1px dashed #c8d6dd;border-radius:12px}
+@media(max-width:620px){
+ .content-modal-header{padding:17px 16px 13px}
+ .content-modal-title h2{font-size:22px;line-height:1.2}
+ .content-change-body{padding:15px 13px 20px;gap:17px}
+ .content-product-row{gap:9px;padding:9px;border-radius:14px}
+ .content-product-row img{width:65px;height:65px;flex-basis:65px}
+ .content-product-copy strong{font-size:14px}
+ .content-product-copy small{font-size:11px}
+ .content-product-button{min-width:81px;padding:10px 8px;font-size:12px;min-height:46px}
+ .content-modal-footer .button{font-size:13px}
+}
