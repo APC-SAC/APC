@@ -1,0 +1,43 @@
+APC INVENTARIO - WEB V15
+
+CAMBIOS
+1. WhatsApp: oculta productos, totales y recipientes cuya cantidad sea 0.
+2. Conteo: botón visible «Cambiar contenido» dentro de cada recipiente.
+3. Recipientes y QR: botón «Cambiar contenido» en cada recipiente.
+4. Selector hecho con React: Solo tápers, Solo tapas, Tápers + tapas,
+   Solo tenedores o combinación personalizada (Rey, GyG, tapas, tenedores).
+5. Cambio atómico en Supabase: valida QR, registra en historial los
+   suministros retirados a 0 y conserva cantidades de los que sigan.
+6. No genera ni renueva QR. No crea ni elimina recipientes ni tablas.
+
+PUBLICACIÓN - POR FAVOR SIGUE ESTE ORDEN
+1. Supabase -> SQL Editor -> pega todo el contenido del archivo
+   APC_INVENTARIO_V15_CAMBIO_CONTENIDO.sql y pulsa Run.
+2. GitHub APC-SAC/APC -> sube TODO el contenido del ZIP
+   APC_INVENTARIO_WEB_V15_GITHUB.zip a la raíz del repositorio.
+   Reemplaza archivos anteriores y confirma «Commit changes».
+3. Abre https://apc-sac.github.io/APC/ y recarga.
+4. Prueba en un tacho sin existencias: Contar -> Tacho -> Cambiar
+   contenido -> Solo tenedores -> Guardar contenido.
+5. Si un recipiente tiene cantidades >0 de suministros que quitas,
+   el sistema pedirá confirmación antes de ponerlos a 0.
+
+NO HAY QUE COMPILAR O INSTALAR APK NUEVA: SOLO CAMBIOS EN LA WEB.
+El nuevo editor de contenidos es un componente real de React 18.
+El resto de la aplicación mantiene su código web anterior para no
+perder funciones, sus datos o los QR ya impresos.
+
+SEGURIDAD
+- Sin cuentas, cualquier persona con un QR válido puede registrar
+  y modificar el contenido; no es adecuado para controles sensibles.
+- El sitio incluye solo la clave publica de Supabase; no sb_secret.
+- La función SQL exige token de recipiente para editar contenido.
+- React se descarga de un CDN cuando se abre el editor; se necesita
+  conexión a Internet al menos la primera vez.
+
+PRUEBAS REALIZADAS
+- Sintaxis JavaScript verificada con Node.
+- Prueba automatizada de WhatsApp sin ceros OK.
+- Prueba de lógica de cambio de contenido OK.
+- No fue posible ejecutar una prueba end-to-end contra el Supabase
+  real del usuario ni una prueba de navegador en este entorno.

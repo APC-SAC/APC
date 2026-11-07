@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { createQrPdf } from './qr-pdf.js';
 
 const cfg = window.APC_CONFIG || {};
 const BASE = cfg.BASE_URL || '/APC/';
@@ -15,7 +16,7 @@ const CACHE_KEY = 'apc_inventory_stock_v7';
 const CONTAINERS_CACHE_KEY = 'apc_inventory_containers_v7';
 const QUEUE_KEY = 'apc_inventory_pending_v7';
 const MAX_QTY = 100000;
-const WEB_VERSION = '13.0.0';
+const WEB_VERSION = '15.0.0';
 const UPDATE_URL = `${BASE}version.json`;
 
 const DB_KEYS = ['taper_rey', 'taper_gyg', 'tapas', 'tenedores'];
@@ -65,9 +66,17 @@ const state = {
   editName: '',
   editDescription: '',
   editKeys: [],
+  contentEditOpen: false,
+  contentEditContainerId: '',
+  contentEditKeys: [],
+  contentEditSaving: false,
   qrPreview: null,
   qrBatchPreview: [],
   qrBatchBusy: false,
+  qrPdfPerPage: 4,
+  qrPdfOmittedIds: [],
+  qrPdfLinkDrafts: {},
+  qrPdfBusy: false,
   qrHelpOpen: false,
   qrHelpContainerId: '',
   clearHistoryOpen: false,
@@ -427,18 +436,81 @@ function renderEditor(container, qrMode) {
     </div>
     <section class="section-block count-section">
       <div class="section-title-row"><div><span class="step-tag">PASO 1 · CONTAR</span><h2>Escribe lo que tienes ahora</h2><p>Toca la foto del producto o el número y escribe la cantidad física.</p></div></div>
+      <div class="count-content-tool"><div><strong>Contenido de este recipiente</strong><small>${escapeHtml(contentsLabel(container))}</small></div><button type="button" class="button change-content-action small" data-action="change-content" data-id="${escapeHtml(container.id)}">✎ Cambiar contenido</button></div>
       <div class="product-grid">${content || '<div class="empty-state">Este recipiente no tiene suministros asignados.</div>'}</div>
       <div class="save-bar"><div><span class="step-tag">PASO 2 · GUARDAR</span><strong>¿Terminaste de contar?</strong><small>Guarda las cantidades registradas.</small></div><button class="button primary save-button" data-action="save-count" data-id="${escapeHtml(container.id)}" ${state.saving ? 'disabled' : ''}>${state.saving ? 'Guardando…' : '✓ Guardar conteo'}</button></div>
     </section>
-    <section class="editor-hero editor-info-bottom"><div><span class="eyebrow">INFORMACIÓN DEL RECIPIENTE</span><h2>${escapeHtml(container.name)}</h2><p>${escapeHtml(parseMeta(container).description || 'Conteo de suministros de este recipiente.')}</p><div class="contents-chip">Contiene: ${escapeHtml(contentsLabel(container))}</div><button class="button secondary small editor-qr-button" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ Ver / imprimir QR</button></div><div class="editor-total"><span>Stock registrado</span><strong>${formatNumber(total)}</strong><small>unidades</small></div></section>
+    <section class="editor-hero editor-info-bottom"><div><span class="eyebrow">INFORMACIÓN DEL RECIPIENTE</span><h2>${escapeHtml(container.name)}</h2><p>${escapeHtml(parseMeta(container).description || 'Conteo de suministros de este recipiente.')}</p><div class="contents-chip">Contiene: ${escapeHtml(contentsLabel(container))}</div><div class="editor-content-actions"><button type="button" class="button secondary small" data-action="change-content" data-id="${escapeHtml(container.id)}">✎ Cambiar contenido</button><button class="button secondary small editor-qr-button" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ Ver / imprimir QR</button></div></div><div class="editor-total"><span>Stock registrado</span><strong>${formatNumber(total)}</strong><small>unidades</small></div></section>
   </div>`;
 }
 function supplyChoice(key, selected) {
   const item = getItem(key);
   return `<label class="supply-choice ${selected ? 'checked' : ''}"><input type="checkbox" data-supply-key="${key}" ${selected ? 'checked' : ''}><span class="choice-check">✓</span>${itemImage(item, true)}<span class="choice-copy"><strong>${escapeHtml(item.label)}</strong><small>${key.startsWith('tapas_') ? 'Tapas de marca ' + item.brand : key.startsWith('taper_') ? 'Recipientes de marca ' + item.brand : 'Suministro adicional'}</small></span></label>`;
 }
+function renderQrPdfSection() {
+  const tokens = getTokens();
+  const ready = state.containers.filter(container => Boolean(tokens[container.id]));
+  const chosen = ready.filter(container => !state.qrPdfOmittedIds.includes(container.id));
+  const missing = state.containers.filter(container => !tokens[container.id]);
+  return `<section class="section-block qr-export-section" aria-labelledby="qr-export-title">
+    <div class="qr-export-header"><div class="qr-export-art">▦</div><div><span class="eyebrow">IMPRESIÓN DE ETIQUETAS</span><h2 id="qr-export-title">Varios QR en un solo PDF</h2><p>Elige los recipientes y cuántas etiquetas quieres por hoja A4. El PDF conserva el logo, el borde azul y la franja naranja de APC.</p></div></div>
+    <div class="qr-export-control-panel">
+      <div class="qr-export-toolbar"><div><strong>1. Elige los QR</strong><small>${chosen.length} seleccionados · ${ready.length} disponibles de ${state.containers.length}</small></div>
+      <div class="qr-export-toolbar-actions"><button type="button" class="button secondary small" data-action="qr-pdf-select-all" ${!ready.length ? 'disabled' : ''}>Seleccionar todos</button><button type="button" class="button secondary small" data-action="qr-pdf-select-none" ${!ready.length ? 'disabled' : ''}>Quitar selección</button></div></div>
+      ${state.containers.length ? `<div class="qr-export-list">${state.containers.map(container => {
+        const hasToken=Boolean(tokens[container.id]);
+        const checked=hasToken&&!state.qrPdfOmittedIds.includes(container.id);
+        return `<div class="qr-export-row ${hasToken?'':'qr-export-missing'}">
+          <label class="qr-export-option"><input type="checkbox" data-qr-pdf-select="${escapeHtml(container.id)}" ${checked?'checked':''} ${hasToken?'':'disabled'}><span class="qr-export-option-icon">${renderContainerCategoryIcon(container)}</span><span class="qr-export-option-name"><strong>${escapeHtml(container.name)}</strong><small>${hasToken?'Usará el QR existente':'QR no guardado en este dispositivo'}</small></span><span class="qr-export-state">${hasToken?'Listo':'Pendiente'}</span></label>
+          ${hasToken?'':`<div class="qr-export-restore"><label for="qr-import-${escapeHtml(container.id)}">¿Ya imprimiste su QR? Pega aquí el enlace existente:</label><div><input id="qr-import-${escapeHtml(container.id)}" data-qr-pdf-link="${escapeHtml(container.id)}" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://apc-sac.github.io/APC/?c=...&k=..." value="${escapeHtml(state.qrPdfLinkDrafts[container.id]||'')}"><button class="button secondary small" data-action="qr-pdf-import" data-id="${escapeHtml(container.id)}">Usar QR</button></div></div>`}</div>`;
+      }).join('')}</div>` : '<div class="empty-state">Todavía no hay recipientes activos.</div>'}
+      <div class="qr-export-bottom"><div class="qr-export-format"><label for="qr-pdf-per-page"><strong>2. ¿Cuántos QR por hoja?</strong></label><select id="qr-pdf-per-page" data-qr-pdf-per-page><option value="1" ${state.qrPdfPerPage===1?'selected':''}>1 por hoja · gigante</option><option value="2" ${state.qrPdfPerPage===2?'selected':''}>2 por hoja · extra grandes</option><option value="4" ${state.qrPdfPerPage===4?'selected':''}>4 por hoja · grandes</option><option value="6" ${state.qrPdfPerPage===6?'selected':''}>6 por hoja · ahorro de papel</option></select><small>Hoja A4 · mismo diseño y tamaño para cada etiqueta.</small></div>
+      <div class="qr-export-submit"><span>${chosen.length ? `${Math.ceil(chosen.length/state.qrPdfPerPage)} ${Math.ceil(chosen.length/state.qrPdfPerPage)===1?'hoja':'hojas'} de PDF`:'Selecciona al menos un QR'}</span><button class="button primary qr-export-download" data-action="qr-pdf-download" ${!chosen.length||state.qrPdfBusy?'disabled':''}>${state.qrPdfBusy?'Preparando PDF…':'⇩ Descargar PDF con los QR'}</button></div></div>
+      ${missing.length?`<p class="qr-export-help">Hay ${missing.length} QR sin enlace guardado en este navegador. Escanea primero su etiqueta original o pega su enlace; <strong>no se generará otro código ni se cambiará el impreso</strong>.</p>`:'<p class="qr-export-help">Se usarán los QR actuales guardados en este dispositivo. No se modificará ningún código.</p>'}
+    </div>
+  </section>`;
+}
+async function downloadQrPdf() {
+  const tokens = getTokens();
+  const chosen = state.containers.filter(container => tokens[container.id] && !state.qrPdfOmittedIds.includes(container.id));
+  if (!chosen.length) { notify('Selecciona un QR disponible antes de descargar.', 'error'); return; }
+  if (state.qrPdfBusy) return;
+  state.qrPdfBusy=true; render();
+  try {
+    // Un clic, un PDF descargable: sin ventanas emergentes ni impresión de páginas en blanco.
+    await new Promise(resolve => setTimeout(resolve, 40));
+    const items=chosen.map(container => ({name:container.name, url:getQrUrl(container.id,tokens[container.id])}));
+    const blob=createQrPdf(items, Number(state.qrPdfPerPage));
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url;
+    link.download=`APC_QR_${items.length}_ETIQUETAS_A4.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+    notify(`PDF preparado: ${items.length} QR en ${Math.ceil(items.length/state.qrPdfPerPage)} hoja(s).`);
+  } catch(error) {
+    notify(`No se pudo crear el PDF. ${error?.message||''}`, 'error');
+  } finally { state.qrPdfBusy=false; render(); }
+}
+function importExistingQrLink(containerId) {
+  const text=String(state.qrPdfLinkDrafts[containerId]||'').trim();
+  try {
+    const url=new URL(text);
+    const expectedPath=new URL(BASE,location.origin).pathname.replace(/\/?$/, '/');
+    if(url.origin!==location.origin || url.pathname.replace(/\/?$/, '/')!==expectedPath || url.searchParams.get('c')!==containerId) throw new Error('El enlace no corresponde a este recipiente.');
+    const token=url.searchParams.get('k')||'';
+    if(!/^[a-zA-Z0-9_-]{16,256}$/.test(token)) throw new Error('Enlace QR incompleto o incorrecto.');
+    saveToken(containerId,token);
+    delete state.qrPdfLinkDrafts[containerId];
+    state.qrPdfOmittedIds=state.qrPdfOmittedIds.filter(id=>id!==containerId);
+    notify('QR existente reconocido. Ya puedes incluirlo en el PDF.');
+  } catch(error) { notify(error?.message||'Pega el enlace completo de la etiqueta QR.', 'error'); }
+}
+
 function renderManage() {
-  return `<div class="page-stack"><section class="section-block manage-intro"><div class="section-title-row"><div><span class="eyebrow">CONFIGURACIÓN</span><h2>Crear un recipiente</h2><p>No importa si es caja, tacho, bandeja o estante. Escribe el nombre que usa tu personal y marca qué va a guardar.</p></div><button class="button secondary small" data-action="generate-all-qr" ${state.qrBatchBusy || !state.containers.length ? 'disabled' : ''}>${state.qrBatchBusy ? 'Generando códigos…' : '▦ Generar QR nuevos para todos'}</button></div>
+  return `<div class="page-stack">${renderQrPdfSection()}<section class="section-block manage-intro"><div class="section-title-row"><div><span class="eyebrow">CONFIGURACIÓN</span><h2>Crear un recipiente</h2><p>No importa si es caja, tacho, bandeja o estante. Escribe el nombre que usa tu personal y marca qué va a guardar.</p></div><button class="button secondary small" data-action="generate-all-qr" ${state.qrBatchBusy || !state.containers.length ? 'disabled' : ''}>${state.qrBatchBusy ? 'Generando códigos…' : '▦ Generar QR nuevos para todos'}</button></div>
     <div class="form-card"><div class="form-field"><label for="create-name">Nombre del recipiente</label><input id="create-name" data-state-field="createName" value="${escapeHtml(state.createName)}" placeholder="Ej. Bandeja azul, Tacho de tapas, Estante 02" maxlength="70"></div>
     <div class="form-field"><label for="create-description">Descripción (opcional)</label><input id="create-description" data-state-field="createDescription" value="${escapeHtml(state.createDescription)}" placeholder="Ej. Almacén junto a la cocina" maxlength="350"></div>
     <div class="form-field"><label>¿Qué suministros guardará?</label><p class="field-help">Puedes marcar varios. El recipiente solo mostrará los que selecciones.</p><div class="supply-choice-grid">${ITEM_DEFS.map(item => supplyChoice(item.key, state.createKeys.includes(item.key))).join('')}</div></div>
@@ -450,10 +522,10 @@ function renderManage() {
 function renderManageCard(container) {
   const editing = state.editContainerId === container.id;
   const meta = parseMeta(container);
-  return `<article class="manage-tile"><div class="manage-tile-head"><div class="container-tile-icon">${renderContainerCategoryIcon(container)}</div><div><span class="eyebrow">RECIPIENTE</span><h3>${escapeHtml(container.name)}</h3><p>${escapeHtml(meta.description || 'Sin descripción')}</p></div></div><div class="manage-tile-meta"><span class="contents-chip">${escapeHtml(contentsLabel(container))}</span><strong>${formatNumber(containerTotal(container))} unidades</strong></div><div class="manage-actions"><button class="button secondary small" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ QR</button><button class="button secondary small" data-action="edit-container" data-id="${escapeHtml(container.id)}">✎ Editar</button><button class="button danger small" data-action="delete-container" data-id="${escapeHtml(container.id)}">Eliminar</button></div>${editing ? renderEditForm(container) : ''}</article>`;
+  return `<article class="manage-tile"><div class="manage-tile-head"><div class="container-tile-icon">${renderContainerCategoryIcon(container)}</div><div><span class="eyebrow">RECIPIENTE</span><h3>${escapeHtml(container.name)}</h3><p>${escapeHtml(meta.description || 'Sin descripción')}</p></div></div><div class="manage-tile-meta"><span class="contents-chip">${escapeHtml(contentsLabel(container))}</span><strong>${formatNumber(containerTotal(container))} unidades</strong></div><div class="manage-actions"><button class="button secondary small" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ QR</button><button class="button secondary small" data-action="edit-container" data-id="${escapeHtml(container.id)}">✎ Nombre</button><button class="button change-content-action small" data-action="change-content" data-id="${escapeHtml(container.id)}">▣ Cambiar contenido</button><button class="button danger small" data-action="delete-container" data-id="${escapeHtml(container.id)}">Eliminar</button></div>${editing ? renderEditForm(container) : ''}</article>`;
 }
 function renderEditForm(container) {
-  return `<div class="edit-form"><div class="form-field"><label>Nombre del recipiente</label><input data-state-field="editName" value="${escapeHtml(state.editName)}" maxlength="70"></div><div class="form-field"><label>Descripción</label><input data-state-field="editDescription" value="${escapeHtml(state.editDescription)}" maxlength="350"></div><div class="form-field"><label>Suministros asignados</label><div class="supply-choice-grid compact-choices">${ITEM_DEFS.map(item => supplyChoice(item.key, state.editKeys.includes(item.key))).join('')}</div></div><div class="edit-form-actions"><button class="button primary" data-action="save-edit" data-id="${escapeHtml(container.id)}">Guardar cambios</button><button class="button secondary" data-action="cancel-edit">Cancelar</button></div></div>`;
+  return `<div class="edit-form"><div class="form-field"><label>Nombre del recipiente</label><input data-state-field="editName" value="${escapeHtml(state.editName)}" maxlength="70"></div><div class="form-field"><label>Descripción</label><input data-state-field="editDescription" value="${escapeHtml(state.editDescription)}" maxlength="350"></div><div class="edit-content-hint">Para añadir o quitar tápers, tapas y tenedores, utiliza el botón <strong>«Cambiar contenido»</strong>. Es más claro y conserva los movimientos del inventario.</div><div class="edit-form-actions"><button class="button primary" data-action="save-edit" data-id="${escapeHtml(container.id)}">Guardar cambios</button><button class="button secondary" data-action="cancel-edit">Cancelar</button></div></div>`;
 }
 function renderMovements() {
   return `<div class="page-stack"><section class="section-block"><div class="section-title-row"><div><span class="eyebrow">HISTORIAL</span><h2>Movimientos recientes</h2><p>Registro automático de cada conteo guardado.</p></div><div class="report-actions"><button class="button secondary small" data-action="pdf-report">⇩ Informe PDF</button><button class="button danger small" data-action="open-clear-history">⌫ Borrar historial</button></div></div><div class="history-safety-note"><strong>Importante:</strong> borrar el historial no modifica las cantidades actuales, los recipientes ni sus códigos QR.</div>${renderMovementRows(state.movements)}</section></div>`;
@@ -501,6 +573,11 @@ function render() {
     return;
   }
   lastRenderedSignature = signature;
+  ++contentReactGeneration;
+  if (contentReactCleanup) {
+    try { contentReactCleanup(); } catch (error) { console.warn('Cerrando editor React:', error); }
+    contentReactCleanup = null;
+  }
   const title = ({ home: 'Resumen', containers: state.qrMode ? 'Conteo del recipiente' : 'Contenedores', manage: 'Recipientes y QR', movements: 'Movimientos', protocol: 'Protocolo', more: 'Más opciones' })[state.page] || 'APC Inventario';
   ROOT.innerHTML = `<div class="app-shell ${state.qrMode ? 'qr-mode' : ''}">
     <aside class="desktop-sidebar"><button class="brand-lockup brand-home" data-action="home"><img src="${BASE}apc-logo.png" alt="APC"><span><strong>APC Inventario</strong><small>Control de suministros</small></span></button><nav class="desktop-nav"><button data-action="navigate" data-page="home" class="${state.page === 'home' ? 'active' : ''}"><span>⌂</span>Resumen</button><button data-action="navigate" data-page="containers" class="${state.page === 'containers' ? 'active' : ''}"><span>▦</span>Contenedores</button><button data-action="navigate" data-page="movements" class="${state.page === 'movements' ? 'active' : ''}"><span>↻</span>Movimientos</button><button data-action="navigate" data-page="manage" class="${state.page === 'manage' ? 'active' : ''}"><span>▣</span>Recipientes y QR</button><button data-action="navigate" data-page="protocol" class="${state.page === 'protocol' ? 'active' : ''}"><span>▤</span>Protocolo</button></nav><button class="button secondary sidebar-update" data-action="check-updates">↻ Buscar actualización</button><div class="sidebar-tip"><strong>Uso rápido</strong><p>Escanea el QR del recipiente, escribe las cantidades y guarda el conteo.</p></div></aside>
@@ -508,8 +585,9 @@ function render() {
     <main class="main-area"><header class="page-header"><div><span class="eyebrow">APC CORPORACIÓN</span><h1>${title}</h1></div><div class="header-actions"><span class="connection-pill ${state.online ? 'online' : 'offline'}">● ${state.online ? 'En línea' : 'Sin internet'}</span><button class="icon-button" data-action="refresh" title="Actualizar inventario">↻</button></div></header>
       ${state.loading ? '<div class="loading-card"><span class="spinner"></span><strong>Cargando inventario…</strong></div>' : state.page === 'home' ? renderHome() : state.page === 'containers' ? renderContainersPage() : state.page === 'manage' ? renderManage() : state.page === 'movements' ? renderMovements() : state.page === 'more' ? renderMorePage() : renderProtocol()}
     </main>
-    ${renderMobileNav()}${renderUpdateNotice()}${renderQrModal()}${renderQrHelpModal()}${renderClearHistoryModal()}${renderProductDetailModal()}${state.toast ? `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}
+    ${renderMobileNav()}${renderUpdateNotice()}${renderQrModal()}${renderQrHelpModal()}${renderClearHistoryModal()}${renderProductDetailModal()}${state.contentEditOpen ? '<div class="content-modal-backdrop"><div id="react-content-editor"></div></div>' : ''}${state.toast ? `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}
   </div>`;
+  mountReactContentEditor();
 }
 function renderQrModal() {
   if (state.qrBatchPreview.length) {
@@ -581,6 +659,127 @@ function renderQrHelpModal() {
   return `<div class="modal-backdrop" data-action="close-qr-help"><section class="qr-modal qr-help-modal" role="dialog" aria-modal="true" aria-label="Vincular QR existente"><div class="modal-heading"><div><span class="eyebrow">SIN CAMBIAR TU ETIQUETA</span><h2>Usar el QR que ya imprimiste</h2></div><button class="icon-button" data-action="close-qr-help" aria-label="Cerrar">×</button></div><div class="qr-help-card"><div class="qr-help-icon">▦</div><div><strong>${escapeHtml(name)}</strong><p>Este teléfono todavía no tiene guardado el acceso de este recipiente. No vamos a crear ni renovar ningún QR.</p></div></div><ol class="qr-help-steps"><li>Abre la cámara de tu teléfono.</li><li>Escanea el QR que ya está pegado en ${escapeHtml(name)}.</li><li>Abre el enlace que aparece en pantalla.</li><li>Cuando cargue APC Inventario, toca el logo para volver al Inicio.</li></ol><p class="qr-safe-note">Después de abrirlo una vez en este mismo navegador, podrás entrar desde Inicio y guardar cantidades sin volver a escanearlo.</p><div class="qr-actions"><button class="button primary" data-action="close-qr-help">Entendido</button></div></section></div>`;
 }
 
+
+// EDITOR DE CONTENIDOS (React): mantiene los QR y las tablas actuales.
+let contentReactCleanup = null;
+let contentReactGeneration = 0;
+function closeContentEditor() {
+  state.contentEditOpen = false;
+  state.contentEditContainerId = '';
+  state.contentEditKeys = [];
+  render();
+}
+function openContentEditor(containerId) {
+  const container = getContainer(containerId);
+  if (!container) return;
+  state.contentEditContainerId = containerId;
+  state.contentEditKeys = [...visibleKeys(container)];
+  state.contentEditOpen = true;
+  render();
+}
+function quantityPlanForContent(container, newKeys) {
+  const oldKeys = visibleKeys(container);
+  // Los tipos nuevos comienzan en 0; se conservan los que siguen seleccionados.
+  const next = Object.fromEntries(['taper_rey','taper_gyg','tapas_rey','tapas_gyg','tenedores'].map(key => [
+    key, oldKeys.includes(key) && newKeys.includes(key) ? logicalQuantity(container, key) : 0
+  ]));
+  const quantities = {
+    taper_rey: next.taper_rey,
+    taper_gyg: next.taper_gyg,
+    tapas: next.tapas_rey + next.tapas_gyg,
+    tenedores: next.tenedores
+  };
+  const expected = Object.fromEntries(DB_KEYS.map(key => [key, getDbQuantity(container.id, key)]));
+  const removed = oldKeys.filter(key => !newKeys.includes(key) && logicalQuantity(container,key)>0)
+    .map(key => `${getItem(key)?.label || key} (${formatNumber(logicalQuantity(container,key))})`);
+  const hidden = DB_KEYS.filter(key => expected[key] > quantities[key] && !removed.some(label => label.includes(getItem(key)?.label || key)));
+  return { quantities, expected, removed, hidden, tapasRey: next.tapas_rey, tapasGyG: next.tapas_gyg };
+}
+async function saveContentEditor(newKeys) {
+  const container = getContainer(state.contentEditContainerId);
+  if (!container || state.contentEditSaving) return;
+  const allowed = categoryOf(container) === 'Cajas'
+    ? ['taper_rey', 'taper_gyg']
+    : ITEM_DEFS.map(item => item.key);
+  const keys = [...new Set(newKeys)].filter(key => allowed.includes(key));
+  if (!keys.length) { notify('Selecciona al menos un tipo de suministro.', 'error'); return; }
+  if (keys.length !== new Set(newKeys).size) { notify('Hay suministros no permitidos para este recipiente.', 'error'); return; }
+  if (!supabase) { notify('No hay conexión con Supabase.', 'error'); return; }
+  if (!navigator.onLine) { notify('Para cambiar el contenido debes estar conectado a internet.', 'error'); return; }
+  if (state.pending.some(p => p.container_id === container.id)) {
+    notify('Este recipiente tiene un conteo pendiente de sincronizar. Sincronízalo antes de cambiar su contenido.', 'error');
+    return;
+  }
+  if (JSON.stringify(keys.slice().sort()) === JSON.stringify(visibleKeys(container).slice().sort())) {
+    closeContentEditor(); notify('El contenido ya estaba configurado así.'); return;
+  }
+  const plan = quantityPlanForContent(container, keys);
+  const decreases = DB_KEYS.filter(key => plan.expected[key] > plan.quantities[key]);
+  if (decreases.length) {
+    const text = decreases.map(key => `${movementItemLabel(key)}: ${formatNumber(plan.expected[key])} → ${formatNumber(plan.quantities[key])}`).join('\n');
+    if (!confirm(`ATENCIÓN: Se pondrán en CERO las existencias de los productos retirados y se registrará el cambio en el historial.\n\n${text}\n\nComprueba que ya los trasladaron físicamente a otro lugar. ¿Continuar?`)) return;
+  }
+  state.contentEditKeys = keys;
+  state.contentEditSaving = true;
+  render();
+  try {
+    const { token } = await ensureContainerToken(container, false);
+    const { error } = await supabase.rpc('apci_change_container_contents_v15', {
+      p_container_id: container.id,
+      p_access_token: token,
+      p_keys: keys,
+      p_expected: plan.expected,
+      p_quantities: plan.quantities,
+      p_tapas_rey: plan.tapasRey,
+      p_tapas_gyg: plan.tapasGyG
+    });
+    if (error) throw error;
+    state.contentEditOpen = false;
+    state.contentEditContainerId = '';
+    state.contentEditKeys = [];
+    state.drafts = {}; // El próximo conteo mostrará los nuevos tipos y sus cantidades.
+    await reloadData();
+    notify(`Contenido actualizado en ${container.name}. Los códigos QR anteriores siguen funcionando.`);
+  } catch (error) {
+    const message = String(error?.message || 'No se pudo cambiar el contenido.');
+    const isMissing = /apci_change_container_contents_v15|schema cache|could not find the function|does not exist/i.test(message);
+    notify(isMissing ? 'Primero ejecuta el SQL V15 en tu proyecto Supabase para activar Cambiar contenido.' : message, 'error');
+  } finally {
+    state.contentEditSaving = false;
+    render();
+  }
+}
+function mountReactContentEditor() {
+  if (!state.contentEditOpen) return;
+  const generation = ++contentReactGeneration;
+  const target = document.getElementById('react-content-editor');
+  if (!target) return;
+  target.innerHTML = '<div class="content-react-loading">Preparando opciones de contenido…</div>';
+  import('./react/ContentEditor.js').then(({ mountContentEditor }) => {
+    if (generation !== contentReactGeneration || !state.contentEditOpen || !target.isConnected) return;
+    const container = getContainer(state.contentEditContainerId);
+    if (!container) return;
+    const allowed = categoryOf(container) === 'Cajas' ? ['taper_rey','taper_gyg'] : ITEM_DEFS.map(item=>item.key);
+    contentReactCleanup = mountContentEditor(target, {
+      name: container.name,
+      allowed,
+      items: ITEM_DEFS.filter(item=>allowed.includes(item.key)).map(item=>({
+        ...item, quantity: visibleKeys(container).includes(item.key) ? logicalQuantity(container, item.key) : 0
+      })),
+      selectedKeys: [...state.contentEditKeys],
+      busy: state.contentEditSaving,
+      onSelectionChange: keys => { state.contentEditKeys = keys; },
+      onClose: closeContentEditor,
+      onSave: saveContentEditor
+    });
+  }).catch(error => {
+    if (state.contentEditOpen && target.isConnected) {
+      target.innerHTML = '<p class="content-react-error">No se pudo cargar el editor. Comprueba tu conexión a Internet y vuelve a intentar.</p>';
+    }
+    console.warn('Error cargando React:', error);
+  });
+}
+
 function renderClearHistoryModal() {
   if (!state.clearHistoryOpen) return '';
   return `<div class="modal-backdrop" data-action="close-clear-history"><section class="qr-modal clear-history-modal" role="dialog" aria-modal="true" aria-label="Eliminar historial completo"><div class="modal-heading"><div><span class="eyebrow">ACCIÓN ADMINISTRATIVA</span><h2>Eliminar todo el historial</h2></div><button class="icon-button" data-action="close-clear-history" aria-label="Cerrar">×</button></div><div class="history-danger-note"><strong>Esta acción no se puede deshacer.</strong><p>Se borrarán todos los movimientos guardados en Supabase, no solo los que aparecen en pantalla. El stock actual, los recipientes y los QR permanecerán intactos.</p></div><div class="form-field"><label for="clear-history-pin">Clave administrativa privada</label><input id="clear-history-pin" type="password" autocomplete="off" enterkeyhint="done" data-state-field="clearHistoryPin" placeholder="Clave de 4 dígitos" inputmode="numeric" maxlength="4"></div><div class="qr-actions"><button class="button secondary" data-action="close-clear-history">Cancelar</button><button class="button danger" data-action="clear-history" ${state.clearingHistory ? 'disabled' : ''}>${state.clearingHistory ? 'Eliminando…' : 'Eliminar todo el historial'}</button></div></section></div>`;
@@ -622,10 +821,8 @@ async function saveContainerEdit(containerId) {
   if (!container) return;
   const name = cleanText(state.editName, 70);
   const description = cleanText(state.editDescription, 350);
-  const keys = [...new Set(state.editKeys)];
+  const keys = visibleKeys(container);
   if (!name) { notify('El nombre no puede quedar vacío.', 'error'); return; }
-  if (!keys.length) { notify('Selecciona al menos un suministro.', 'error'); return; }
-  const meta = parseMeta(container);
   const rey = logicalQuantity(container, 'tapas_rey');
   const gyG = logicalQuantity(container, 'tapas_gyg');
   const packed = packDescription(description, keys, rey, gyG);
@@ -831,22 +1028,34 @@ function shareWhatsApp() {
     '📦 *APC CORPORACIÓN | INVENTARIO*',
     `📅 ${formatDate(generatedAt)}`,
     '━━━━━━━━━━━━━━━━━━━━',
-    '📊 *RESUMEN GENERAL*',
-    `• Tápers Rey: *${formatNumber(totals.taper_rey)}*`,
-    `• Tápers GyG: *${formatNumber(totals.taper_gyg)}*`,
-    `• TOTAL TÁPERS: *${formatNumber(totals.totalTapers)}*`,
-    `• Tapas Rey: *${formatNumber(totals.tapas_rey)}*`,
-    `• Tapas GyG: *${formatNumber(totals.tapas_gyg)}*`,
-    `• TOTAL TAPAS: *${formatNumber(totals.totalTapas)}*`,
-    `• Tenedores: *${formatNumber(totals.tenedores)}*`,
-    `• TOTAL DE UNIDADES: *${formatNumber(totals.totalUnits)}*`,
-    '━━━━━━━━━━━━━━━━━━━━',
-    '📍 *DETALLE POR RECIPIENTE*'
+    '📊 *RESUMEN GENERAL*'
   ];
-  rows.forEach(({ container, keys, total }, index) => {
+  // El WhatsApp no muestra productos, totales ni recipientes con cantidad cero.
+  const summary = [
+    ['Tápers Rey', totals.taper_rey],
+    ['Tápers GyG', totals.taper_gyg],
+    ['TOTAL TÁPERS', totals.totalTapers],
+    ['Tapas Rey', totals.tapas_rey],
+    ['Tapas GyG', totals.tapas_gyg],
+    ['TOTAL TAPAS', totals.totalTapas],
+    ['Tenedores', totals.tenedores],
+    ['TOTAL DE UNIDADES', totals.totalUnits]
+  ];
+  summary.filter(([,qty]) => Number(qty) > 0)
+    .forEach(([name,qty]) => lines.push(`• ${name}: *${formatNumber(qty)}*`));
+  if (!summary.some(([,qty]) => Number(qty) > 0)) lines.push('_Sin existencias registradas._');
+  lines.push('━━━━━━━━━━━━━━━━━━━━', '📍 *DETALLE POR RECIPIENTE*');
+  const populated = rows.map(({ container, keys }) => ({
+    container,
+    products: keys.map(key => ({ name: getItem(key)?.label || key, quantity: logicalQuantity(container, key) }))
+      .filter(item => item.quantity > 0)
+  })).filter(row => row.products.length > 0);
+  populated.forEach(({ container, products }, index) => {
+    const total = products.reduce((sum,item) => sum + item.quantity, 0);
     lines.push(`${index + 1}. *${container.name}* — ${formatNumber(total)} unidades`);
-    keys.forEach(key => lines.push(`   · ${getItem(key)?.label || key}: ${formatNumber(logicalQuantity(container, key))}`));
+    products.forEach(item => lines.push(`   · ${item.name}: *${formatNumber(item.quantity)}*`));
   });
+  if (!populated.length) lines.push('_No hay recipientes con existencias._');
   lines.push('━━━━━━━━━━━━━━━━━━━━', '_Reporte generado desde APC Inventario._');
   window.open(`https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`, '_blank', 'noopener');
 }
@@ -879,6 +1088,7 @@ window.addEventListener('popstate', event => {
   const returningFromQr = state.qrMode;
   state.menuOpen = false;
   state.clearHistoryOpen = false;
+  state.contentEditOpen = false;
   state.productDetailKey = '';
   state.qrPreview = null;
   state.qrBatchPreview = [];
@@ -896,6 +1106,7 @@ window.addEventListener('popstate', event => {
 });
 // Back de Android puede llamar esto en futuras APK. En la web también usamos el historial real.
 window.APCHandleBack = () => {
+  if (state.contentEditOpen) { closeContentEditor(); return true; }
   if (state.clearHistoryOpen) { state.clearHistoryOpen=false; render(); return true; }
   if (state.productDetailKey) { state.productDetailKey=''; render(); return true; }
   if (state.qrPreview || state.qrBatchPreview.length) { state.qrPreview=null; state.qrBatchPreview=[]; render(); return true; }
@@ -921,6 +1132,7 @@ ROOT.addEventListener('click', async event => {
   const action = actionNode.dataset.action;
   if (document.activeElement?.matches?.('.quantity-input, #clear-history-pin')) document.activeElement.blur();
   const id = actionNode.dataset.id;
+  if (action === 'change-content') { openContentEditor(id); return; }
   if (action === 'show-product-detail') { state.productDetailKey = actionNode.dataset.key; render(); return; }
   if (action === 'close-product-detail') { if (event.target.closest('.product-detail-modal') && !event.target.closest('[data-action="close-product-detail"]')) return; state.productDetailKey=''; render(); return; }
   if (action === 'home') { goHome(); return; }
@@ -941,6 +1153,10 @@ ROOT.addEventListener('click', async event => {
   if (action === 'save-count') { await saveCount(id); return; }
   if (action === 'activate-edit') { const container = getContainer(id); if (container) await activateEdit(container); return; }
   if (action === 'show-qr') { const container = getContainer(id); if (container) await openQr(container); return; }
+  if (action === 'qr-pdf-select-all') { state.qrPdfOmittedIds=[]; render(); return; }
+  if (action === 'qr-pdf-select-none') { state.qrPdfOmittedIds=state.containers.map(c=>c.id); render(); return; }
+  if (action === 'qr-pdf-download') { await downloadQrPdf(); return; }
+  if (action === 'qr-pdf-import') { importExistingQrLink(id); return; }
   if (action === 'generate-all-qr') { await generateAllQr(); return; }
   if (action === 'open-clear-history') { state.clearHistoryPin = ''; state.clearHistoryOpen = true; render(); return; }
   if (action === 'close-clear-history') { if (event.target.closest('.clear-history-modal') && !event.target.closest('[data-action="close-clear-history"]')) return; state.clearHistoryOpen = false; state.clearHistoryPin = ''; render(); return; }
@@ -982,6 +1198,7 @@ ROOT.addEventListener('input', event => {
     state.drafts[`${input.dataset.container}:${input.dataset.qtyInput}`] = raw;
   }
   if (input.matches('[data-state-field]')) state[input.dataset.stateField] = input.value;
+  if (input.matches('[data-qr-pdf-link]')) state.qrPdfLinkDrafts[input.dataset.qrPdfLink] = input.value;
 });
 ROOT.addEventListener('focusout', event => {
   const input = event.target;
@@ -992,6 +1209,15 @@ ROOT.addEventListener('focusout', event => {
 });
 ROOT.addEventListener('change', event => {
   const input = event.target;
+  if (input.matches('[data-qr-pdf-select]')) {
+    const id=input.dataset.qrPdfSelect;
+    state.qrPdfOmittedIds=input.checked ? state.qrPdfOmittedIds.filter(k=>k!==id) : [...new Set([...state.qrPdfOmittedIds,id])];
+    render(); return;
+  }
+  if (input.matches('[data-qr-pdf-per-page]')) {
+    state.qrPdfPerPage=Number(input.value)||4;
+    render(); return;
+  }
   if (input.matches('[data-supply-key]')) {
     const key = input.dataset.supplyKey;
     const inEdit = Boolean(state.editContainerId && input.closest('.edit-form'));
