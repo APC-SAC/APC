@@ -1,6 +1,6 @@
 {
-  "web_version": "16.0.0",
+  "web_version": "17.0.0",
   "android_version": "1.3.0",
   "apk_url": "https://github.com/APC-SAC/APC/releases/latest/download/APC-Inventario.apk",
-  "release_notes": "Web V16: añadir o quitar tápers, tapas y tenedores en cualquier recipiente, incluidas las cajas. Se conservan QR y stock existente."
+  "release_notes": "Web V17: edición de nombre y grupo; fotos de referencia compartidas; grabación de chips NFC mediante Chrome Android, sin renovar QR."
 }

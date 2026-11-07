@@ -16,7 +16,7 @@ const CACHE_KEY = 'apc_inventory_stock_v7';
 const CONTAINERS_CACHE_KEY = 'apc_inventory_containers_v7';
 const QUEUE_KEY = 'apc_inventory_pending_v7';
 const MAX_QTY = 100000;
-const WEB_VERSION = '16.0.0';
+const WEB_VERSION = '17.0.0';
 const UPDATE_URL = `${BASE}version.json`;
 
 const DB_KEYS = ['taper_rey', 'taper_gyg', 'tapas', 'tenedores'];
@@ -53,6 +53,7 @@ const state = {
   online: navigator.onLine,
   syncing: false,
   containers: [],
+  photos: {},
   inventory: readJSON(CACHE_KEY, []),
   movements: [],
   selectedContainer: initialContainerId || '',
@@ -62,9 +63,15 @@ const state = {
   createName: '',
   createDescription: '',
   createKeys: [...DEFAULT_CREATE_KEYS],
+  createKind: 'caja',
+  createPhotoData: null,
   editContainerId: '',
   editName: '',
   editDescription: '',
+  editKind: 'otro',
+  editPhotoData: null, // null = conservar, cadena vacía = retirar
+  editPhotoBusy: false,
+  editSaving: false,
   editKeys: [],
   contentEditOpen: false,
   contentEditContainerId: '',
@@ -212,6 +219,26 @@ async function loadInventory() {
   writeJSON(CACHE_KEY, rows);
   return rows;
 }
+async function loadPhotos() {
+  if (!supabase) return {};
+  const { data, error } = await supabase.from('apci_container_photos').select('container_id,photo_data');
+  if (error) {
+    // La primera instalación puede no haber ejecutado el SQL V17.
+    console.info('Fotos de recipientes: ejecutar SQL V17 para habilitar.', error.message);
+    return state.photos;
+  }
+  state.photos = Object.fromEntries((data || []).map(row => [row.container_id, row.photo_data]));
+  return state.photos;
+}
+function containerPhoto(container) {
+  const url = state.photos[container?.id];
+  // Nunca insertar un valor arbitrario de la base como src.
+  return /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(url || '') ? url : '';
+}
+function containerVisual(container, cls='container-tile-icon') {
+  const photo = containerPhoto(container);
+  return `<div class="${cls}${photo ? ' has-photo' : ''}">${photo ? `<img class="reference-photo" alt="Foto de ${escapeHtml(container.name)}" src="${photo}">` : renderContainerCategoryIcon(container)}</div>`;
+}
 async function loadMovements() {
   if (!supabase) return [];
   const { data, error } = await supabase.from('apci_movements').select('id,container_id,item_key,delta,quantity_before,quantity_after,movement_type,note,created_at').order('created_at', { ascending: false }).limit(100);
@@ -241,6 +268,7 @@ async function initialize() {
     state.containers = containers;
     state.inventory = inventory;
     state.movements = await loadMovements();
+    await loadPhotos();
     if (state.qrMode && !containers.some(item => item.id === state.qrContainerId)) {
       state.qrMode = false;
       state.page = 'home';
@@ -289,14 +317,14 @@ function renderContainerCard(container, actionLabel = 'Contar') {
   const total = containerTotal(container);
   const token = getToken(container.id);
   return `<article class="container-tile">
-    <div class="container-tile-icon">${renderContainerCategoryIcon(container)}</div>
+    ${containerVisual(container)}
     <div class="container-tile-body"><span class="eyebrow">CONTENEDOR</span><h3>${escapeHtml(container.name)}</h3><p>${escapeHtml(parseMeta(container).description || 'Sin descripción adicional')}</p><span class="contents-chip">${escapeHtml(contentsLabel(container))}</span><strong class="container-tile-total">${formatNumber(total)} <small>unidades</small></strong></div>
     <div class="container-tile-actions"><button class="button primary small" data-action="open-container" data-id="${escapeHtml(container.id)}">${actionLabel}</button>${token ? '<span class="access-state ready">Edición lista en este navegador</span>' : '<span class="access-state">Se activa al abrir</span>'}</div>
   </article>`;
 }
 function renderReadOnlyContainerCard(container) {
   const keys = visibleKeys(container);
-  return `<article class="readonly-container"><div class="readonly-container-head"><div class="container-tile-icon">${renderContainerCategoryIcon(container)}</div><div><strong>${escapeHtml(container.name)}</strong><small>${escapeHtml(parseMeta(container).description || contentsLabel(container))}</small></div><b>${formatNumber(containerTotal(container))}</b></div><div class="readonly-lines">${keys.map(key => `<div class="readonly-line"><span>${escapeHtml(getItem(key)?.label || key)}</span><strong>${formatNumber(logicalQuantity(container, key))}</strong></div>`).join('') || '<p>Sin suministros asignados</p>'}</div><span class="readonly-note">Solo lectura · no modifica el inventario</span></article>`;
+  return `<article class="readonly-container"><div class="readonly-container-head">${containerVisual(container)}<div><strong>${escapeHtml(container.name)}</strong><small>${escapeHtml(parseMeta(container).description || contentsLabel(container))}</small></div><b>${formatNumber(containerTotal(container))}</b></div><div class="readonly-lines">${keys.map(key => `<div class="readonly-line"><span>${escapeHtml(getItem(key)?.label || key)}</span><strong>${formatNumber(logicalQuantity(container, key))}</strong></div>`).join('') || '<p>Sin suministros asignados</p>'}</div><span class="readonly-note">Solo lectura · no modifica el inventario</span></article>`;
 }
 function renderProductDetailModal() {
   if (!state.productDetailKey) return '';
@@ -304,7 +332,7 @@ function renderProductDetailModal() {
   if (!item) return '';
   const places = state.containers.map(container => ({container, amount: visibleKeys(container).includes(item.key) ? logicalQuantity(container,item.key) : 0})).filter(row => row.amount > 0);
   const total = places.reduce((sum,row)=>sum+row.amount,0);
-  return `<div class="modal-backdrop product-modal-backdrop" data-action="close-product-detail"><section class="qr-modal product-detail-modal" role="dialog" aria-modal="true" aria-label="Distribución de ${escapeHtml(item.label)}"><div class="modal-heading"><div><span class="eyebrow">DETALLE DEL INVENTARIO</span><h2>¿Dónde están guardados?</h2></div><button class="icon-button" data-action="close-product-detail" aria-label="Cerrar detalle">×</button></div><div class="detail-product-head">${itemImage(item)}<div><strong>${escapeHtml(item.detailLabel || item.label)}</strong><small>Existencias registradas</small><b>${formatNumber(total)} unidades</b></div></div><h3 class="detail-section-title">Distribución por recipientes</h3><div class="detail-place-list">${places.length ? places.sort((a,b)=>b.amount-a.amount).map(({container, amount})=>`<div class="detail-place-row"><span class="detail-mini-icon">${renderContainerCategoryIcon(container)}</span><div><strong>${escapeHtml(container.name)}</strong><small>${escapeHtml(categoryOf(container))}</small></div><b>${formatNumber(amount)}</b></div>`).join('') : '<div class="empty-state">No hay unidades de este suministro registradas en los recipientes activos.</div>'}</div><button class="button primary detail-close-button" data-action="close-product-detail">Entendido</button></section></div>`;
+  return `<div class="modal-backdrop product-modal-backdrop" data-action="close-product-detail"><section class="qr-modal product-detail-modal" role="dialog" aria-modal="true" aria-label="Distribución de ${escapeHtml(item.label)}"><div class="modal-heading"><div><span class="eyebrow">DETALLE DEL INVENTARIO</span><h2>¿Dónde están guardados?</h2></div><button class="icon-button" data-action="close-product-detail" aria-label="Cerrar detalle">×</button></div><div class="detail-product-head">${itemImage(item)}<div><strong>${escapeHtml(item.detailLabel || item.label)}</strong><small>Existencias registradas</small><b>${formatNumber(total)} unidades</b></div></div><h3 class="detail-section-title">Distribución por recipientes</h3><div class="detail-place-list">${places.length ? places.sort((a,b)=>b.amount-a.amount).map(({container, amount})=>`<div class="detail-place-row"><span class="detail-mini-icon">${containerPhoto(container) ? `<img src="${containerPhoto(container)}" alt="">` : renderContainerCategoryIcon(container)}</span><div><strong>${escapeHtml(container.name)}</strong><small>${escapeHtml(categoryOf(container))}</small></div><b>${formatNumber(amount)}</b></div>`).join('') : '<div class="empty-state">No hay unidades de este suministro registradas en los recipientes activos.</div>'}</div><button class="button primary detail-close-button" data-action="close-product-detail">Entendido</button></section></div>`;
 }
 function renderTotalsCard(label, value, imageKey, tone = '') {
   const item = getItem(imageKey);
@@ -350,9 +378,13 @@ async function applyWebUpdate() {
   location.assign(`${BASE}?v=${Date.now()}`);
 }
 function categoryOf(container) {
-  const text = `${container.name || ''} ${container.id || ''}`.toLocaleLowerCase('es');
-  if (/\bcaja\b|caja-|cajas/.test(text)) return 'Cajas';
-  if (/\btacho\b|tacho-|tachos/.test(text)) return 'Tachos';
+  if (container?.kind === 'caja') return 'Cajas';
+  if (container?.kind === 'tacho') return 'Tachos';
+  if (container?.kind === 'otro') return 'Otros recipientes';
+  // Compatibilidad si una instalación antigua no tiene kind.
+  const id = String(container?.id || '').toLowerCase();
+  if (id.startsWith('caja-')) return 'Cajas';
+  if (id.startsWith('tacho-')) return 'Tachos';
   return 'Otros recipientes';
 }
 function renderCategoryIcon(category) {
@@ -440,7 +472,7 @@ function renderEditor(container, qrMode) {
       <div class="product-grid">${content || '<div class="empty-state">Este recipiente no tiene suministros asignados.</div>'}</div>
       <div class="save-bar"><div><span class="step-tag">PASO 2 · GUARDAR</span><strong>¿Terminaste de contar?</strong><small>Guarda las cantidades registradas.</small></div><button class="button primary save-button" data-action="save-count" data-id="${escapeHtml(container.id)}" ${state.saving ? 'disabled' : ''}>${state.saving ? 'Guardando…' : '✓ Guardar conteo'}</button></div>
     </section>
-    <section class="editor-hero editor-info-bottom"><div><span class="eyebrow">INFORMACIÓN DEL RECIPIENTE</span><h2>${escapeHtml(container.name)}</h2><p>${escapeHtml(parseMeta(container).description || 'Conteo de suministros de este recipiente.')}</p><div class="contents-chip">Contiene: ${escapeHtml(contentsLabel(container))}</div><div class="editor-content-actions"><button type="button" class="button secondary small" data-action="change-content" data-id="${escapeHtml(container.id)}">✎ Cambiar contenido</button><button class="button secondary small editor-qr-button" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ Ver / imprimir QR</button></div></div><div class="editor-total"><span>Stock registrado</span><strong>${formatNumber(total)}</strong><small>unidades</small></div></section>
+    <section class="editor-hero editor-info-bottom"><div><span class="eyebrow">INFORMACIÓN DEL RECIPIENTE</span><h2>${escapeHtml(container.name)}</h2>${containerPhoto(container) ? `<img class="editor-reference-photo" src="${containerPhoto(container)}" alt="Foto de referencia de ${escapeHtml(container.name)}">` : ''}<p>${escapeHtml(parseMeta(container).description || 'Conteo de suministros de este recipiente.')}</p><div class="contents-chip">Contiene: ${escapeHtml(contentsLabel(container))}</div><div class="editor-content-actions"><button type="button" class="button secondary small" data-action="change-content" data-id="${escapeHtml(container.id)}">✎ Cambiar contenido</button><button class="button secondary small" data-action="edit-container" data-id="${escapeHtml(container.id)}">✎ Nombre, grupo y foto</button><button class="button secondary small editor-qr-button" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ Ver / imprimir QR</button></div></div><div class="editor-total"><span>Stock registrado</span><strong>${formatNumber(total)}</strong><small>unidades</small></div></section>
   </div>`;
 }
 function supplyChoice(key, selected) {
@@ -510,9 +542,10 @@ function importExistingQrLink(containerId) {
 }
 
 function renderManage() {
-  return `<div class="page-stack">${renderQrPdfSection()}<section class="section-block manage-intro"><div class="section-title-row"><div><span class="eyebrow">CONFIGURACIÓN</span><h2>Crear un recipiente</h2><p>No importa si es caja, tacho, bandeja o estante. Escribe el nombre que usa tu personal y marca qué va a guardar.</p></div><button class="button secondary small" data-action="generate-all-qr" ${state.qrBatchBusy || !state.containers.length ? 'disabled' : ''}>${state.qrBatchBusy ? 'Generando códigos…' : '▦ Generar QR nuevos para todos'}</button></div>
-    <div class="form-card"><div class="form-field"><label for="create-name">Nombre del recipiente</label><input id="create-name" data-state-field="createName" value="${escapeHtml(state.createName)}" placeholder="Ej. Bandeja azul, Tacho de tapas, Estante 02" maxlength="70"></div>
+  return `<div class="page-stack">${renderQrPdfSection()}<section class="section-block manage-intro"><div class="section-title-row"><div><span class="eyebrow">CONFIGURACIÓN</span><h2>Crear un recipiente</h2><p>Elige su grupo, escribe el nombre y marca qué suministros guardará. También puedes añadir una fotografía.</p></div><button class="button secondary small" data-action="generate-all-qr" ${state.qrBatchBusy || !state.containers.length ? 'disabled' : ''}>${state.qrBatchBusy ? 'Generando códigos…' : '▦ Generar QR nuevos para todos'}</button></div>
+    <div class="form-card"><div class="form-field"><label for="create-kind">¿Dónde quieres clasificarlo?</label><select id="create-kind" data-state-field="createKind" class="select-kind"><option value="caja" ${state.createKind === 'caja' ? 'selected' : ''}>📦 Cajas</option><option value="tacho" ${state.createKind === 'tacho' ? 'selected' : ''}>🪣 Tachos</option><option value="otro" ${state.createKind === 'otro' ? 'selected' : ''}>▦ Otros recipientes</option></select></div><div class="form-field"><label for="create-name">Nombre del recipiente</label><input id="create-name" data-state-field="createName" value="${escapeHtml(state.createName)}" placeholder="Ej. Bandeja azul, Tacho de tapas, Estante 02" maxlength="70"></div>
     <div class="form-field"><label for="create-description">Descripción (opcional)</label><input id="create-description" data-state-field="createDescription" value="${escapeHtml(state.createDescription)}" placeholder="Ej. Almacén junto a la cocina" maxlength="350"></div>
+    <div class="form-field"><label for="create-photo-file">Foto de referencia (opcional)</label><div class="photo-upload-row">${state.createPhotoData ? `<img class="photo-upload-preview" src="${state.createPhotoData}" alt="Foto nueva">` : '<div class="photo-upload-placeholder">📷</div>'}<div><input id="create-photo-file" data-photo-input="create" type="file" accept="image/jpeg,image/png,image/webp,image/*"><small>Haz una foto o selecciona una imagen. Se reduce de tamaño antes de guardarse.</small>${state.createPhotoData ? '<button type="button" class="button secondary small" data-action="clear-create-photo">Quitar foto</button>' : ''}</div></div></div>
     <div class="form-field"><label>¿Qué suministros guardará?</label><p class="field-help">Puedes marcar varios. El recipiente solo mostrará los que selecciones.</p><div class="supply-choice-grid">${ITEM_DEFS.map(item => supplyChoice(item.key, state.createKeys.includes(item.key))).join('')}</div></div>
     <div class="form-note"><strong>Importante:</strong> Las tapas Rey y GyG se contarán por separado en la web y en el informe; Supabase conservará el total combinado de tapas para mantener la base actual sin SQL nuevo.</div>
     <button class="button primary create-button" data-action="create-container">＋ Crear recipiente y generar QR</button></div></section>
@@ -520,12 +553,26 @@ function renderManage() {
   </div>`;
 }
 function renderManageCard(container) {
-  const editing = state.editContainerId === container.id;
   const meta = parseMeta(container);
-  return `<article class="manage-tile"><div class="manage-tile-head"><div class="container-tile-icon">${renderContainerCategoryIcon(container)}</div><div><span class="eyebrow">RECIPIENTE</span><h3>${escapeHtml(container.name)}</h3><p>${escapeHtml(meta.description || 'Sin descripción')}</p></div></div><div class="manage-tile-meta"><span class="contents-chip">${escapeHtml(contentsLabel(container))}</span><strong>${formatNumber(containerTotal(container))} unidades</strong></div><div class="manage-actions"><button class="button secondary small" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ QR</button><button class="button secondary small" data-action="edit-container" data-id="${escapeHtml(container.id)}">✎ Nombre</button><button class="button change-content-action small" data-action="change-content" data-id="${escapeHtml(container.id)}">▣ Cambiar contenido</button><button class="button danger small" data-action="delete-container" data-id="${escapeHtml(container.id)}">Eliminar</button></div>${editing ? renderEditForm(container) : ''}</article>`;
+  return `<article class="manage-tile"><div class="manage-tile-head">${containerVisual(container)}<div><span class="eyebrow">${escapeHtml(categoryOf(container).toUpperCase())}</span><h3>${escapeHtml(container.name)}</h3><p>${escapeHtml(meta.description || 'Sin descripción')}</p></div></div><div class="manage-tile-meta"><span class="contents-chip">${escapeHtml(contentsLabel(container))}</span><strong>${formatNumber(containerTotal(container))} unidades</strong></div><div class="manage-actions"><button class="button secondary small" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ QR / NFC</button><button class="button secondary small" data-action="edit-container" data-id="${escapeHtml(container.id)}">✎ Editar datos y foto</button><button class="button change-content-action small" data-action="change-content" data-id="${escapeHtml(container.id)}">▣ Cambiar contenido</button><button class="button danger small" data-action="delete-container" data-id="${escapeHtml(container.id)}">Eliminar</button></div></article>`;
 }
-function renderEditForm(container) {
-  return `<div class="edit-form"><div class="form-field"><label>Nombre del recipiente</label><input data-state-field="editName" value="${escapeHtml(state.editName)}" maxlength="70"></div><div class="form-field"><label>Descripción</label><input data-state-field="editDescription" value="${escapeHtml(state.editDescription)}" maxlength="350"></div><div class="edit-content-hint">Para añadir o quitar tápers, tapas y tenedores, utiliza el botón <strong>«Cambiar contenido»</strong>. Es más claro y conserva los movimientos del inventario.</div><div class="edit-form-actions"><button class="button primary" data-action="save-edit" data-id="${escapeHtml(container.id)}">Guardar cambios</button><button class="button secondary" data-action="cancel-edit">Cancelar</button></div></div>`;
+function renderEditModal() {
+  if (!state.editContainerId) return '';
+  const container = getContainer(state.editContainerId);
+  if (!container) return '';
+  const photo = state.editPhotoData === null ? containerPhoto(container) : state.editPhotoData;
+  return `<div class="edit-modal-backdrop" data-action="cancel-edit"><section class="edit-modal" role="dialog" aria-modal="true" aria-label="Editar recipiente" data-stop-close="true">
+    <header class="edit-modal-header"><div><span class="eyebrow">PERSONALIZAR RECIPIENTE</span><h2>Editar ${escapeHtml(container.name)}</h2><p>Tu QR y sus cantidades no cambiarán.</p></div><button type="button" class="icon-button" data-action="cancel-edit" aria-label="Cerrar">×</button></header>
+    <div class="edit-modal-body">
+      <label class="form-field"><span>Nombre del recipiente</span><input type="text" data-state-field="editName" maxlength="70" value="${escapeHtml(state.editName)}" placeholder="Ej. Tacho de tapas"></label>
+      <label class="form-field"><span>Grupo donde aparece</span><select class="select-kind" data-state-field="editKind"><option value="caja" ${state.editKind === 'caja' ? 'selected' : ''}>📦 Cajas</option><option value="tacho" ${state.editKind === 'tacho' ? 'selected' : ''}>🪣 Tachos</option><option value="otro" ${state.editKind === 'otro' ? 'selected' : ''}>▦ Otros recipientes</option></select></label>
+      <label class="form-field"><span>Descripción (opcional)</span><input type="text" data-state-field="editDescription" maxlength="350" value="${escapeHtml(state.editDescription)}" placeholder="Ej. Almacén junto a cocina"></label>
+      <div class="form-field"><label for="edit-photo-file">Foto del recipiente</label><div class="photo-edit-preview">${photo ? `<img src="${photo}" alt="Foto actual de ${escapeHtml(container.name)}">` : '<div class="photo-large-placeholder">📷<span>Sin foto</span></div>'}</div>
+      <input id="edit-photo-file" type="file" data-photo-input="edit" accept="image/jpeg,image/png,image/webp,image/*"><small>Selecciona una imagen desde tu celular. Se verá en todos los dispositivos.</small>${photo ? '<button type="button" class="button secondary small" data-action="remove-edit-photo">Quitar fotografía</button>' : ''}</div>
+      <div class="edit-content-hint">Para cambiar qué productos contiene, usa «Cambiar contenido» desde la tarjeta del recipiente. Aquí solo modificas nombre, ubicación en el menú y foto.</div>
+    </div>
+    <footer class="edit-modal-footer"><button type="button" class="button secondary" data-action="cancel-edit">Cancelar</button><button type="button" class="button primary" data-action="save-edit" data-id="${escapeHtml(container.id)}" ${state.editSaving || state.editPhotoBusy ? 'disabled' : ''}>${state.editSaving ? 'Guardando…' : '✓ Guardar cambios'}</button></footer>
+  </section></div>`;
 }
 function renderMovements() {
   return `<div class="page-stack"><section class="section-block"><div class="section-title-row"><div><span class="eyebrow">HISTORIAL</span><h2>Movimientos recientes</h2><p>Registro automático de cada conteo guardado.</p></div><div class="report-actions"><button class="button secondary small" data-action="pdf-report">⇩ Informe PDF</button><button class="button danger small" data-action="open-clear-history">⌫ Borrar historial</button></div></div><div class="history-safety-note"><strong>Importante:</strong> borrar el historial no modifica las cantidades actuales, los recipientes ni sus códigos QR.</div>${renderMovementRows(state.movements)}</section></div>`;
@@ -564,7 +611,7 @@ function renderMobileNav() {
 let lastRenderedSignature = '';
 function render() {
   // Los eventos de Supabase no deben desmontar un input activo mientras se escribe.
-  const editing = document.activeElement?.matches?.('.quantity-input, #clear-history-pin');
+  const editing = document.activeElement?.matches?.('.quantity-input, #clear-history-pin, .edit-modal input[type=text], .edit-modal select, .form-card input[type=text]');
   const signature = [state.page, state.selectedContainer, state.showEditor, state.qrMode, state.clearHistoryOpen, state.productDetailKey].join('|');
   if (editing && signature === lastRenderedSignature && !state.loading) {
     const oldToast = ROOT.querySelector('.toast');
@@ -585,7 +632,7 @@ function render() {
     <main class="main-area"><header class="page-header"><div><span class="eyebrow">APC CORPORACIÓN</span><h1>${title}</h1></div><div class="header-actions"><span class="connection-pill ${state.online ? 'online' : 'offline'}">● ${state.online ? 'En línea' : 'Sin internet'}</span><button class="icon-button" data-action="refresh" title="Actualizar inventario">↻</button></div></header>
       ${state.loading ? '<div class="loading-card"><span class="spinner"></span><strong>Cargando inventario…</strong></div>' : state.page === 'home' ? renderHome() : state.page === 'containers' ? renderContainersPage() : state.page === 'manage' ? renderManage() : state.page === 'movements' ? renderMovements() : state.page === 'more' ? renderMorePage() : renderProtocol()}
     </main>
-    ${renderMobileNav()}${renderUpdateNotice()}${renderQrModal()}${renderQrHelpModal()}${renderClearHistoryModal()}${renderProductDetailModal()}${state.contentEditOpen ? '<div class="content-modal-backdrop"><div id="react-content-editor"></div></div>' : ''}${state.toast ? `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}
+    ${renderMobileNav()}${renderUpdateNotice()}${renderQrModal()}${renderQrHelpModal()}${renderClearHistoryModal()}${renderProductDetailModal()}${renderEditModal()}${state.contentEditOpen ? '<div class="content-modal-backdrop"><div id="react-content-editor"></div></div>' : ''}${state.toast ? `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}
   </div>`;
   mountReactContentEditor();
 }
@@ -597,7 +644,7 @@ function renderQrModal() {
   if (!state.qrPreview) return '';
   const preview = state.qrPreview;
   const qr = qrImageUrl(preview.url);
-  return `<div class="modal-backdrop" data-action="close-qr"><section class="qr-modal" role="dialog" aria-modal="true" aria-label="Código QR" data-stop-close="true"><div class="modal-heading"><div><span class="eyebrow">ETIQUETA DEL RECIPIENTE</span><h2>${preview.created ? 'Nuevo QR listo para imprimir' : 'QR del recipiente'}</h2></div><button class="icon-button" data-action="close-qr" aria-label="Cerrar">×</button></div><div class="qr-label" id="qr-label"><div class="qr-label-head"><img src="${BASE}apc-logo.png" alt="APC"><div><strong>APC CORPORACIÓN</strong><small>Inventario de suministros</small></div></div><img class="qr-code" src="${qr}" alt="Código QR de ${escapeHtml(preview.name)}"><div class="qr-name">${escapeHtml(preview.name.toUpperCase())}</div><div class="qr-instruction">ESCANEAR PARA ACTUALIZAR INVENTARIO</div></div>${preview.created ? '<p class="qr-warning">Se creó un acceso adicional para este recipiente. Los QR anteriores seguirán funcionando. Puedes imprimir esta etiqueta nueva.</p>' : '<p class="qr-safe-note">Este QR corresponde al acceso activo de este recipiente.</p>'}<div class="qr-actions"><button class="button secondary" data-action="copy-qr">Copiar enlace</button><button class="button secondary" data-action="open-qr-link">Abrir QR</button><button class="button secondary" data-action="renew-qr">Generar otro QR</button><button class="button primary" data-action="print-qr">▣ Imprimir QR</button></div></section></div>`;
+  return `<div class="modal-backdrop" data-action="close-qr"><section class="qr-modal" role="dialog" aria-modal="true" aria-label="Código QR" data-stop-close="true"><div class="modal-heading"><div><span class="eyebrow">ETIQUETA DEL RECIPIENTE</span><h2>${preview.created ? 'Nuevo QR listo para imprimir' : 'QR del recipiente'}</h2></div><button class="icon-button" data-action="close-qr" aria-label="Cerrar">×</button></div><div class="qr-label" id="qr-label"><div class="qr-label-head"><img src="${BASE}apc-logo.png" alt="APC"><div><strong>APC CORPORACIÓN</strong><small>Inventario de suministros</small></div></div><img class="qr-code" src="${qr}" alt="Código QR de ${escapeHtml(preview.name)}"><div class="qr-name">${escapeHtml(preview.name.toUpperCase())}</div><div class="qr-instruction">ESCANEAR PARA ACTUALIZAR INVENTARIO</div></div>${preview.created ? '<p class="qr-warning">Se creó un acceso adicional para este recipiente. Los QR anteriores seguirán funcionando. Puedes imprimir esta etiqueta nueva.</p>' : '<p class="qr-safe-note">Este QR corresponde al acceso activo de este recipiente.</p>'}<p class="qr-safe-note nfc-instructions"><strong>NFC:</strong> Si tienes un chip NTAG213/215/216 y Chrome en Android, toca «Grabar chip NFC», autoriza el permiso y acerca el chip a tu teléfono. Se grabará exactamente el enlace de este QR, sin cambiarlo. En la APK o un navegador sin Web NFC, copia el enlace y grábalo como «URL» con la app NFC Tools.</p><div class="qr-actions"><button class="button secondary" data-action="copy-qr">Copiar enlace</button><button class="button secondary" data-action="open-qr-link">Abrir QR</button><button class="button secondary" data-action="renew-qr">Generar otro QR</button><button class="button secondary nfc-action" data-action="write-nfc">◉ Grabar chip NFC</button><button class="button primary" data-action="print-qr">▣ Imprimir QR</button></div></section></div>`;
 }
 function qrImageUrl(url) { return `https://api.qrserver.com/v1/create-qr-code/?size=900x900&margin=20&data=${encodeURIComponent(url)}`; }
 
@@ -795,10 +842,10 @@ async function createContainer() {
   if (!keys.length) { notify('Selecciona al menos un suministro.', 'error'); return; }
   if (!supabase) { notify('Supabase no está configurado.', 'error'); return; }
   const packed = packDescription(description, keys, 0, 0);
-  let result = await supabase.rpc('apci_create_container', { p_kind: 'otro', p_name: name, p_description: packed, p_item_group: 'mixto' });
+  let result = await supabase.rpc('apci_create_container', { p_kind: state.createKind, p_name: name, p_description: packed, p_item_group: 'mixto' });
   // Compatibilidad con la función V2, que no recibía p_item_group.
   if (result.error && /function .*apci_create_container|schema cache|item_group.*does not exist/i.test(result.error.message || '')) {
-    result = await supabase.rpc('apci_create_container', { p_kind: 'otro', p_name: name, p_description: packed });
+    result = await supabase.rpc('apci_create_container', { p_kind: state.createKind, p_name: name, p_description: packed });
   }
   const { data, error } = result;
   if (error) { notify(error.message || 'No se pudo crear el recipiente.', 'error'); return; }
@@ -808,6 +855,16 @@ async function createContainer() {
   const savedName = row.out_name || row.name || name;
   if (!id || !token) { notify('El recipiente se creó, pero no se recibió su QR.', 'error'); return; }
   saveToken(id, token);
+  let photoError = null;
+  if (state.createPhotoData) {
+    const resultPhoto = await supabase.rpc('apci_update_container_details_v17', {
+      p_container_id: id, p_access_token: token, p_name: savedName,
+      p_description: packed, p_kind: state.createKind, p_photo_data: state.createPhotoData
+    });
+    photoError = resultPhoto.error;
+  }
+  state.createPhotoData = null;
+  state.createKind = 'caja';
   state.createName = '';
   state.createDescription = '';
   state.createKeys = [...DEFAULT_CREATE_KEYS];
@@ -817,23 +874,75 @@ async function createContainer() {
   state.qrBatchPreview = [];
   state.page = 'manage';
   render();
-  notify(`${savedName} creado correctamente.`);
+  if (photoError) notify(`${savedName} creado, pero la foto no se pudo guardar. Ejecuta SQL V17.`, 'error'); else notify(`${savedName} creado correctamente.`);
 }
 async function saveContainerEdit(containerId) {
   const container = getContainer(containerId);
-  if (!container) return;
+  if (!container || state.editSaving) return;
   const name = cleanText(state.editName, 70);
   const description = cleanText(state.editDescription, 350);
-  const keys = visibleKeys(container);
-  if (!name) { notify('El nombre no puede quedar vacío.', 'error'); return; }
-  const rey = logicalQuantity(container, 'tapas_rey');
-  const gyG = logicalQuantity(container, 'tapas_gyg');
-  const packed = packDescription(description, keys, rey, gyG);
-  const error = await updateContainerMetadata(container, name, packed, container.kind || 'otro', container.item_group || 'mixto');
-  if (error) { notify(error.message || 'No se pudo actualizar el recipiente.', 'error'); return; }
-  state.editContainerId = '';
-  await reloadData();
-  notify('Cambios guardados.');
+  const kind = state.editKind;
+  if (!name) { notify('Escribe el nombre del recipiente.', 'error'); return; }
+  if (!['caja','tacho','otro'].includes(kind)) { notify('Selecciona Cajas, Tachos u Otros.', 'error'); return; }
+  if (!supabase) { notify('No hay conexión con Supabase.', 'error'); return; }
+  state.editSaving = true;
+  render();
+  try {
+    const { token } = await ensureContainerToken(container);
+    const packed = packDescription(description, visibleKeys(container), logicalQuantity(container,'tapas_rey'), logicalQuantity(container,'tapas_gyg'));
+    const { error } = await supabase.rpc('apci_update_container_details_v17', {
+      p_container_id: container.id,
+      p_access_token: token,
+      p_name: name,
+      p_description: packed,
+      p_kind: kind,
+      p_photo_data: state.editPhotoData
+    });
+    if (error) throw error;
+    state.editContainerId = '';
+    state.editPhotoData = null;
+    await reloadData();
+    notify('Nombre, grupo y fotografía guardados. Los QR no cambiaron.');
+  } catch (error) {
+    const message = /apci_update_container_details_v17|schema cache|could not find/i.test(error.message || '')
+      ? 'Ejecuta primero el SQL V17 en Supabase para poder editar.'
+      : error.message || 'No se pudo editar el recipiente.';
+    notify(message, 'error');
+  } finally {
+    state.editSaving = false;
+    render();
+  }
+}
+function processPhotoFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type) && !/\.(jpg|jpeg|png|webp|heic|heif)$/i.test(file.name)) { reject(new Error('Selecciona una imagen JPG, PNG o WebP.')); return; }
+    if (file.size > 10 * 1024 * 1024) { reject(new Error('La foto no debe superar 10 MB.')); return; }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('No se pudo abrir la foto.'));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error('Este formato de imagen no se puede leer. Usa JPG o PNG.'));
+      image.onload = () => {
+        let maximum = 800, quality = .75, result = '';
+        for (let attempt=0; attempt<7; attempt++) {
+          const scale = Math.min(maximum/image.width, maximum/image.height, 1);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(image.width*scale));
+          canvas.height = Math.max(1, Math.round(image.height*scale));
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+          ctx.drawImage(image,0,0,canvas.width,canvas.height);
+          result=canvas.toDataURL('image/jpeg',quality);
+          if (result.length <= 130000) { resolve(result); return; }
+          maximum = Math.max(280, Math.round(maximum*.78));
+          quality = Math.max(.42,quality-.07);
+        }
+        reject(new Error('La foto es demasiado pesada. Prueba con otra imagen.'));
+      };
+      image.src=String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 async function deleteContainer(container) {
   if (!confirm(`¿Eliminar ${container.name}? Dejará de aparecer en el inventario, pero se conservará el historial.`)) return;
@@ -843,6 +952,7 @@ async function deleteContainer(container) {
     error = fallback.error;
   }
   if (error) { notify(error.message || 'No se pudo eliminar.', 'error'); return; }
+  delete state.photos[container.id];
   const tokens = getTokens(); delete tokens[container.id]; writeJSON(TOKEN_KEY, tokens);
   await reloadData();
   if (state.selectedContainer === container.id) { state.selectedContainer = ''; state.showEditor = false; }
@@ -970,6 +1080,7 @@ async function reloadData() {
     state.containers = await loadContainers();
     await loadInventory();
     state.movements = await loadMovements();
+    await loadPhotos();
     refreshDrafts();
     render();
   } catch (error) { notify(error?.message || 'No se pudieron actualizar los datos.', 'error'); }
@@ -1169,11 +1280,29 @@ ROOT.addEventListener('click', async event => {
     const container = getContainer(id); if (!container) return;
     const meta = parseMeta(container);
     state.editContainerId = id; state.editName = container.name; state.editDescription = meta.description;
+    state.editKind = ['caja','tacho','otro'].includes(container.kind) ? container.kind : (categoryOf(container)==='Cajas'?'caja':categoryOf(container)==='Tachos'?'tacho':'otro');
+    state.editPhotoData = null;
     state.editKeys = meta.hasMeta ? [...meta.keys] : [...visibleKeys(container)];
     render(); return;
   }
-  if (action === 'cancel-edit') { state.editContainerId = ''; render(); return; }
-  if (action === 'save-edit') { await saveContainerEdit(id); return; }
+  if (action === 'cancel-edit') { document.activeElement?.blur?.(); if(event.target.closest('.edit-modal') && !event.target.closest('[data-action="cancel-edit"]')) return; state.editContainerId = ''; state.editPhotoData = null; render(); return; }
+  if (action === 'save-edit') { document.activeElement?.blur?.(); await saveContainerEdit(id); return; }
+  if (action === 'remove-edit-photo') { state.editPhotoData = ''; render(); return; }
+  if (action === 'clear-create-photo') { state.createPhotoData = null; render(); return; }
+  if (action === 'write-nfc') {
+    const url = state.qrPreview?.url;
+    if (!url) return;
+    if (!('NDEFReader' in window)) { notify('Abre APC Inventario en Chrome de Android, o copia el enlace y usa NFC Tools para grabar tu chip.', 'error'); return; }
+    try {
+      const writer = new NDEFReader();
+      // La escritura empieza directamente en este toque del usuario.
+      await writer.write({records:[{recordType:'url',data:url}]});
+      notify('Chip NFC grabado. Pruébalo acercándolo a tu celular.');
+    } catch (error) {
+      notify(error?.message || 'No se pudo grabar el chip NFC. Revisa los permisos y que esté cerca del teléfono.', 'error');
+    }
+    return;
+  }
   if (action === 'delete-container') { const container = getContainer(id); if (container) await deleteContainer(container); return; }
   if (action === 'close-qr') { if (event.target.closest('.qr-modal') && !event.target.closest('.modal-heading [data-action="close-qr"]') && !event.target.closest('.qr-actions [data-action="close-qr"]')) return; state.qrPreview = null; state.qrBatchPreview = []; render(); return; }
   if (action === 'copy-qr') { try { await navigator.clipboard.writeText(state.qrPreview.url); notify('Enlace copiado.'); } catch { notify('No se pudo copiar el enlace.', 'error'); } return; }
@@ -1210,8 +1339,21 @@ ROOT.addEventListener('focusout', event => {
     state.drafts[`${input.dataset.container}:${input.dataset.qtyInput}`] = '0';
   }
 });
-ROOT.addEventListener('change', event => {
+ROOT.addEventListener('change', async event => {
   const input = event.target;
+  if (input.matches('select[data-state-field]')) { state[input.dataset.stateField] = input.value; return; }
+  if (input.matches('[data-photo-input]')) {
+    const mode = input.dataset.photoInput;
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const result = await processPhotoFile(file);
+      if (mode === 'edit') state.editPhotoData=result;
+      else state.createPhotoData=result;
+      render();
+    } catch (error) { notify(error.message || 'No se pudo procesar la foto.', 'error'); }
+    return;
+  }
   if (input.matches('[data-qr-pdf-select]')) {
     const id=input.dataset.qrPdfSelect;
     state.qrPdfOmittedIds=input.checked ? state.qrPdfOmittedIds.filter(k=>k!==id) : [...new Set([...state.qrPdfOmittedIds,id])];

@@ -1,0 +1,39 @@
+APC INVENTARIO V17 — NUEVA EDICION Y NFC
+========================================
+
+ANTES DE SUBIR LA WEB:
+1. En Supabase > SQL Editor, ejecuta TODO el archivo
+   APC_INVENTARIO_V17_EDICION_FOTOS.sql que viene aparte.
+2. Descomprime APC_INVENTARIO_WEB_V17_GITHUB.zip y sube TODO su contenido
+   a la raíz del repositorio APC-SAC/APC en GitHub (reemplaza los archivos).
+3. Espera que termine GitHub Pages y vuelve a abrir la web en tu móvil.
+
+CAMBIOS
+- El botón «Editar datos y foto» muestra una ventana independiente,
+  para que el formulario de nombre no se cierre al abrirlo en el móvil.
+- Puedes cambiar el nombre, la descripción y la clasificación
+  (Cajas / Tachos / Otros recipientes).
+- Puedes poner, reemplazar o quitar la fotografía de referencia.
+  Se reduce automáticamente y se guarda en Supabase para verla desde
+  otros teléfonos. No requiere una cuenta nueva.
+- También puedes escoger el grupo y una foto al crear recipientes.
+- El mismo QR y el mismo identificador se conservan cuando modificas
+  el nombre o la clasificación. Si tu etiqueta impresa contiene el nombre
+  anterior, la etiqueta visual no se actualiza físicamente: sólo el enlace
+  sigue funcionando. Reimprime si deseas actualizar ese texto.
+- En el botón «QR / NFC» puedes grabar un chip NFC NDEF compatible
+  (NTAG213/215/216) con el MISMO enlace QR. En Chrome Android con NFC
+  habilitado: pulsa «Grabar chip NFC», acepta permiso y acerca el chip.
+- El navegador de la APK basada en WebView no garantiza Web NFC.
+  En ese caso copia el enlace desde la web y usa la aplicación NFC Tools
+  o abre APC Inventario en Chrome Android para grabarlo.
+
+IMPORTANTE
+- Ejecuta el SQL V17 ANTES de probar editar y guardar fotografías.
+- No uses una clave secret/service_role en un repositorio público.
+- Las fotos son visibles para quien tenga acceso a la web.
+- Los chips llevan un enlace con token: quien los copie puede abrir
+  ese recipiente; trátalos igual que tus QR y no los publiques.
+- Este ZIP NO incluye una APK nueva: la web existente se actualiza en
+  el navegador o en la WebView de la APK, pero el icono y NFC nativos
+  de Android no cambian.
