@@ -16,7 +16,7 @@ const CACHE_KEY = 'apc_inventory_stock_v7';
 const CONTAINERS_CACHE_KEY = 'apc_inventory_containers_v7';
 const QUEUE_KEY = 'apc_inventory_pending_v7';
 const MAX_QTY = 100000;
-const WEB_VERSION = '20.0.0';
+const WEB_VERSION = '22.0.0';
 const UPDATE_URL = `${BASE}version.json`;
 
 // UIDs de los 9 stickers físicos. Son identificadores de lectura, NO claves secretas.
@@ -79,6 +79,16 @@ const state = {
   createKind: 'caja',
   createPhotoData: null,
   createWantNfc: false,
+  manageTab: 'recipients',
+  quickNfcContainerId: '',
+  quickNfcUid: '',
+  quickNfcLabel: '',
+  quickNfcCustom: false,
+  quickNfcBusy: false,
+  quickNfcError: '',
+  quickNfcSuccess: '',
+  nfcManagerError: '',
+  qrPdfGenerating: false,
   editContainerId: '',
   editName: '',
   editDescription: '',
@@ -434,9 +444,9 @@ function renderCategoryIcon(category) {
 function renderContainerCategoryIcon(container) { return renderCategoryIcon(categoryOf(container)); }
 function renderGroupedContainers(containers, cardBuilder) {
   const groups = [
-    { name: 'Cajas', hint: 'Tápers y recipientes de almacenamiento' },
-    { name: 'Tachos', hint: 'Tapas, tenedores u otros suministros' },
-    { name: 'Otros recipientes', hint: 'Bandejas, estantes, valdes y más' }
+    { name: 'Cajas', hint: 'Toca para mostrar u ocultar' },
+    { name: 'Tachos', hint: 'Toca para mostrar u ocultar' },
+    { name: 'Otros recipientes', hint: 'Toca para mostrar u ocultar' }
   ];
   return `<div class="inventory-groups">${groups.map(g => {
      const list = containers.filter(c => categoryOf(c) === g.name);
@@ -505,7 +515,7 @@ function renderEditor(container, qrMode) {
       <div class="product-grid">${content || '<div class="empty-state">Este recipiente no tiene suministros asignados.</div>'}</div>
       <div class="save-bar"><div><span class="step-tag">PASO 2 · GUARDAR</span><strong>¿Terminaste de contar?</strong><small>Guarda las cantidades registradas.</small></div><button class="button primary save-button" data-action="save-count" data-id="${escapeHtml(container.id)}" ${state.saving ? 'disabled' : ''}>${state.saving ? 'Guardando…' : '✓ Guardar conteo'}</button></div>
     </section>
-    <section class="editor-hero editor-info-bottom"><div><span class="eyebrow">INFORMACIÓN DEL RECIPIENTE</span><h2>${escapeHtml(container.name)}</h2>${containerPhoto(container) ? `<img class="editor-reference-photo" src="${containerPhoto(container)}" alt="Foto de referencia de ${escapeHtml(container.name)}">` : ''}<p>${escapeHtml(parseMeta(container).description || 'Conteo de suministros de este recipiente.')}</p><div class="contents-chip">Contiene: ${escapeHtml(contentsLabel(container))}</div><div class="editor-content-actions"><button type="button" class="button secondary small" data-action="change-content" data-id="${escapeHtml(container.id)}">✎ Cambiar contenido</button><button class="button secondary small" data-action="edit-container" data-id="${escapeHtml(container.id)}">✎ Nombre, grupo y foto</button><button class="button secondary small" data-action="open-nfc-manager" data-id="${escapeHtml(container.id)}">◉ NFC opcional (${state.nfcTags.filter(t=>t.container_id===container.id).length})</button><button class="button secondary small editor-qr-button" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ Ver / imprimir QR</button></div></div><div class="editor-total"><span>Stock registrado</span><strong>${formatNumber(total)}</strong><small>unidades</small></div></section>
+    <section class="editor-hero editor-info-bottom"><div><span class="eyebrow">INFORMACIÓN DEL RECIPIENTE</span><h2>${escapeHtml(container.name)}</h2>${containerPhoto(container) ? `<img class="editor-reference-photo" src="${containerPhoto(container)}" alt="Foto de referencia de ${escapeHtml(container.name)}">` : ''}<p>${escapeHtml(parseMeta(container).description || 'Conteo de suministros de este recipiente.')}</p><div class="contents-chip">Contiene: ${escapeHtml(contentsLabel(container))}</div><div class="editor-content-actions"><button type="button" class="button secondary small" data-action="change-content" data-id="${escapeHtml(container.id)}">✎ Cambiar contenido</button><button class="button secondary small" data-action="edit-container" data-id="${escapeHtml(container.id)}">✎ Nombre, grupo y foto</button><button class="button secondary small" data-action="nfc-pick-container" data-id="${escapeHtml(container.id)}">◉ NFC opcional (${state.nfcTags.filter(t=>t.container_id===container.id).length})</button><button class="button secondary small editor-qr-button" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ Ver / imprimir QR</button></div></div><div class="editor-total"><span>Stock registrado</span><strong>${formatNumber(total)}</strong><small>unidades</small></div></section>
   </div>`;
 }
 function supplyChoice(key, selected) {
@@ -513,27 +523,28 @@ function supplyChoice(key, selected) {
   return `<label class="supply-choice ${selected ? 'checked' : ''}"><input type="checkbox" data-supply-key="${key}" ${selected ? 'checked' : ''}><span class="choice-check">✓</span>${itemImage(item, true)}<span class="choice-copy"><strong>${escapeHtml(item.label)}</strong><small>${key.startsWith('tapas_') ? 'Tapas de marca ' + item.brand : key.startsWith('taper_') ? 'Recipientes de marca ' + item.brand : 'Suministro adicional'}</small></span></label>`;
 }
 function renderQrPdfSection() {
-  const tokens = getTokens();
-  const ready = state.containers.filter(container => Boolean(tokens[container.id]));
-  const chosen = ready.filter(container => !state.qrPdfOmittedIds.includes(container.id));
-  const missing = state.containers.filter(container => !tokens[container.id]);
-  return `<section class="section-block qr-export-section" aria-labelledby="qr-export-title">
-    <div class="qr-export-header"><div class="qr-export-art">▦</div><div><span class="eyebrow">IMPRESIÓN DE ETIQUETAS</span><h2 id="qr-export-title">Varios QR en un solo PDF</h2><p>Elige los recipientes y cuántas etiquetas quieres por hoja A4. El PDF conserva el logo, el borde azul y la franja naranja de APC.</p></div></div>
-    <div class="qr-export-control-panel">
-      <div class="qr-export-toolbar"><div><strong>1. Elige los QR</strong><small>${chosen.length} seleccionados · ${ready.length} disponibles de ${state.containers.length}</small></div>
-      <div class="qr-export-toolbar-actions"><button type="button" class="button secondary small" data-action="qr-pdf-select-all" ${!ready.length ? 'disabled' : ''}>Seleccionar todos</button><button type="button" class="button secondary small" data-action="qr-pdf-select-none" ${!ready.length ? 'disabled' : ''}>Quitar selección</button></div></div>
-      ${state.containers.length ? `<div class="qr-export-list">${state.containers.map(container => {
-        const hasToken=Boolean(tokens[container.id]);
-        const checked=hasToken&&!state.qrPdfOmittedIds.includes(container.id);
-        return `<div class="qr-export-row ${hasToken?'':'qr-export-missing'}">
-          <label class="qr-export-option"><input type="checkbox" data-qr-pdf-select="${escapeHtml(container.id)}" ${checked?'checked':''} ${hasToken?'':'disabled'}><span class="qr-export-option-icon">${renderContainerCategoryIcon(container)}</span><span class="qr-export-option-name"><strong>${escapeHtml(container.name)}</strong><small>${hasToken?'Usará el QR existente':'QR no guardado en este dispositivo'}</small></span><span class="qr-export-state">${hasToken?'Listo':'Pendiente'}</span></label>
-          ${hasToken?'':`<div class="qr-export-restore"><label for="qr-import-${escapeHtml(container.id)}">¿Ya imprimiste su QR? Pega aquí el enlace existente:</label><div><input id="qr-import-${escapeHtml(container.id)}" data-qr-pdf-link="${escapeHtml(container.id)}" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://apc-sac.github.io/APC/?c=...&k=..." value="${escapeHtml(state.qrPdfLinkDrafts[container.id]||'')}"><button class="button secondary small" data-action="qr-pdf-import" data-id="${escapeHtml(container.id)}">Usar QR</button></div></div>`}</div>`;
-      }).join('')}</div>` : '<div class="empty-state">Todavía no hay recipientes activos.</div>'}
-      <div class="qr-export-bottom"><div class="qr-export-format"><label for="qr-pdf-per-page"><strong>2. ¿Cuántos QR por hoja?</strong></label><select id="qr-pdf-per-page" data-qr-pdf-per-page><option value="1" ${state.qrPdfPerPage===1?'selected':''}>1 por hoja · gigante</option><option value="2" ${state.qrPdfPerPage===2?'selected':''}>2 por hoja · extra grandes</option><option value="4" ${state.qrPdfPerPage===4?'selected':''}>4 por hoja · grandes</option><option value="6" ${state.qrPdfPerPage===6?'selected':''}>6 por hoja · ahorro de papel</option></select><small>Hoja A4 · mismo diseño y tamaño para cada etiqueta.</small></div>
-      <div class="qr-export-submit"><span>${chosen.length ? `${Math.ceil(chosen.length/state.qrPdfPerPage)} ${Math.ceil(chosen.length/state.qrPdfPerPage)===1?'hoja':'hojas'} de PDF`:'Selecciona al menos un QR'}</span><button class="button primary qr-export-download" data-action="qr-pdf-download" ${!chosen.length||state.qrPdfBusy?'disabled':''}>${state.qrPdfBusy?'Preparando PDF…':'⇩ Descargar PDF con los QR'}</button></div></div>
-      ${missing.length?`<p class="qr-export-help">Hay ${missing.length} QR sin enlace guardado en este navegador. Escanea primero su etiqueta original o pega su enlace; <strong>no se generará otro código ni se cambiará el impreso</strong>.</p>`:'<p class="qr-export-help">Se usarán los QR actuales guardados en este dispositivo. No se modificará ningún código.</p>'}
-    </div>
-  </section>`;
+  const tokens=getTokens();
+  const ready=state.containers.filter(c=>Boolean(tokens[c.id]));
+  const chosen=ready.filter(c=>!state.qrPdfOmittedIds.includes(c.id));
+  const missing=state.containers.filter(c=>!tokens[c.id]);
+  return `<section class="section-block apc-manage-section qr-export-section"><div class="section-title-row"><div><span class="eyebrow">IMPRIMIR ETIQUETAS</span><h2>Varios QR en una hoja</h2><p>Todos tienen el mismo diseño APC. Elige cuántos imprimir por hoja A4.</p></div></div>
+    ${missing.length?`<div class="apc-qr-prepare"><strong>${missing.length} recipientes aún no tienen un QR guardado en este teléfono.</strong><p>Puedes generar un acceso adicional para los que faltan. <strong>No invalida los QR que ya imprimiste.</strong></p><button class="button primary" data-action="qr-pdf-prepare-missing" ${state.qrPdfGenerating?'disabled':''}>${state.qrPdfGenerating?'Preparando QR…':`▦ Preparar ${missing.length} QR faltantes`}</button></div>`:'<p class="apc-info-light">✓ Todos los QR están listos en este dispositivo.</p>'}
+    <details class="apc-detail apc-qr-select" ${state.qrPdfGenerating?'open':''}><summary>Elegir recipientes (${chosen.length} seleccionados de ${ready.length})</summary><div class="apc-pdf-buttons"><button class="button secondary small" data-action="qr-pdf-select-all">Todos</button><button class="button secondary small" data-action="qr-pdf-select-none">Ninguno</button></div><div class="apc-pdf-choices">${ready.map(c=>`<label class="apc-pdf-choice"><input type="checkbox" data-qr-pdf-select="${escapeHtml(c.id)}" ${state.qrPdfOmittedIds.includes(c.id)?'':'checked'}><span>${renderContainerCategoryIcon(c)}</span><b>${escapeHtml(c.name)}</b></label>`).join('')||'<p>Prepara al menos un QR para seleccionar.</p>'}</div></details>
+    <div class="apc-qr-export-bottom"><label for="qr-pdf-per-page"><strong>¿Cuántos QR por hoja?</strong></label><select id="qr-pdf-per-page" data-qr-pdf-per-page><option value="1" ${state.qrPdfPerPage===1?'selected':''}>1 · Gigante</option><option value="2" ${state.qrPdfPerPage===2?'selected':''}>2 · Muy grandes</option><option value="4" ${state.qrPdfPerPage===4?'selected':''}>4 · Grandes</option><option value="6" ${state.qrPdfPerPage===6?'selected':''}>6 · Ahorra papel</option></select><button class="button primary" data-action="qr-pdf-download" ${!chosen.length||state.qrPdfBusy?'disabled':''}>${state.qrPdfBusy?'Preparando…':`⇩ Descargar PDF (${chosen.length} QR)`}</button></div>
+    <p class="field-help">La impresión no modifica los QR activos. Si algún acceso se generó de nuevo, comprueba que abra el recipiente antes de pegarlo.</p></section>`;
+}
+async function prepareMissingQrForPdf() {
+  if(state.qrPdfGenerating) return;
+  const missing=state.containers.filter(c=>!getToken(c.id));
+  if(!missing.length){notify('Todos los QR están preparados.');return;}
+  if(!confirm(`Se crearán ${missing.length} QR adicionales para este dispositivo. Los impresos anteriormente no se invalidan. ¿Continuar?`)) return;
+  state.qrPdfGenerating=true;render();let created=0;
+  try {
+    for(const c of missing){await ensureContainerToken(c);created++;}
+    state.qrPdfOmittedIds=[];
+    notify(`${created} QR preparados. Ya puedes exportar el PDF.`);
+  }catch(e){notify(`Se prepararon ${created} de ${missing.length}. ${e.message||'Error de conexión.'}`,'error');}
+  finally{state.qrPdfGenerating=false;render();}
 }
 async function downloadQrPdf() {
   const tokens = getTokens();
@@ -574,25 +585,138 @@ function importExistingQrLink(containerId) {
   } catch(error) { notify(error?.message||'Pega el enlace completo de la etiqueta QR.', 'error'); }
 }
 
+function renderNfcQuickPage() {
+  const container=getContainer(state.quickNfcContainerId);
+  const own=container?state.nfcTags.filter(t=>t.container_id===container.id):[];
+  const byUid=new Map(state.nfcTags.map(t=>[t.uid,t]));
+  const selectedUid=normalizeNfcUid(state.quickNfcUid);
+  const selected=byUid.get(selectedUid);
+  const assignedOther=selected && selected.container_id !== container?.id;
+  const chips=NFC_STICKERS.map(([label,uid])=>{
+    const tag=byUid.get(uid);
+    const loc=tag?getContainer(tag.container_id)?.name||'otro recipiente':null;
+    const suffix=tag?(tag.container_id===container?.id?' — ya vinculado aquí':` — usado en ${loc}`):' — libre';
+    return `<option value="${uid}" ${selectedUid===uid?'selected':''} ${tag&&tag.container_id!==container?.id?'disabled':''}>${escapeHtml(label+suffix)}</option>`;
+  }).join('');
+  const selectedIsListed=NFC_STICKERS.some(([,uid])=>uid===selectedUid);
+  const useCustom=state.quickNfcCustom || (selectedUid && !selectedIsListed);
+  const options=state.containers.map(c=>`<option value="${escapeHtml(c.id)}" ${c.id===state.quickNfcContainerId?'selected':''}>${escapeHtml(c.name)} · ${escapeHtml(categoryOf(c))}</option>`).join('');
+  return `<section class="section-block apc-manage-section apc-nfc-quick" id="apc-nfc-quick">
+      <div class="section-title-row"><div><span class="eyebrow">VINCULACIÓN NFC</span><h2>Asignar un sticker</h2><p>Sin ventanas grandes. Solo 3 pasos. El QR siempre seguirá funcionando.</p></div></div>
+      ${!state.nfcReady?`<div class="nfc-alert error" role="alert">No se puede guardar todavía: ${escapeHtml(state.nfcLoadError||'No se puede leer Supabase.')}<br>Si no ejecutaste el SQL NFC V19, debes instalarlo una vez.</div>`:''}
+      <div class="apc-quick-step"><div class="apc-quick-title"><span>1</span><strong>Elige el recipiente</strong></div>
+        <select id="quick-nfc-container" data-quick-nfc-container aria-label="Seleccionar recipiente"><option value="">Selecciona una caja, tacho u otro…</option>${options}</select>
+      </div>
+      <div class="apc-quick-step ${!container?'apc-quick-disabled':''}"><div class="apc-quick-title"><span>2</span><strong>Elige tu sticker</strong></div>
+        <button class="button secondary apc-quick-scan" type="button" data-action="nfc-quick-scan" ${!container?'disabled':''}>◉ Escanear sticker con mi celular</button>
+        <p class="apc-quick-help">Si el navegador no permite leerlo, escoge su código de la lista.</p>
+        <select data-quick-nfc-uid aria-label="Código del sticker" ${!container?'disabled':''}>
+          <option value="" ${!selectedUid?'selected':''}>Elige uno de tus 9 stickers…</option>${chips}
+          <option value="manual" ${useCustom?'selected':''}>Otro sticker · Escribir UID</option>
+        </select>
+        ${useCustom?`<label class="apc-quick-manual"><span>Código UID del chip</span><input type="text" data-quick-nfc-manual maxlength="32" spellcheck="false" autocapitalize="characters" autocomplete="off" placeholder="Ej. 53EA69F3640001" value="${escapeHtml(selectedUid)}"></label>`:''}
+        ${selectedUid?`<div class="apc-nfc-selected-uid">UID: <strong>${escapeHtml(selectedUid)}</strong>${selected?.container_id===container?.id?' · Ya registrado aquí':''}</div>`:''}
+      </div>
+      <div class="apc-quick-step ${!container?'apc-quick-disabled':''}"><div class="apc-quick-title"><span>3</span><strong>Guardar el vínculo</strong></div>
+        <button type="button" class="button primary apc-nfc-main-save" data-action="nfc-quick-save" ${!container||!selectedUid||Boolean(assignedOther)||state.quickNfcBusy||!state.nfcReady?'disabled':''}>${state.quickNfcBusy?'Guardando…':'✓ Vincular sticker a '+escapeHtml(container?.name||'recipiente')}</button>
+        ${assignedOther?`<div class="nfc-alert warning">Este UID ya está asignado a ${escapeHtml(getContainer(selected.container_id)?.name||'otro recipiente')}. Primero desvincúlalo.</div>`:''}
+        ${state.quickNfcError?`<div class="nfc-alert error" role="alert">${escapeHtml(state.quickNfcError)}</div>`:''}
+        ${state.quickNfcSuccess?`<div class="nfc-alert note" role="status">✓ ${escapeHtml(state.quickNfcSuccess)}</div>`:''}
+        <p class="apc-quick-help">Solo este botón guarda en Supabase; elegir un sticker no lo registra automáticamente.</p>
+      </div>
+      ${container?`<details class="apc-detail apc-linked-collapsible"><summary>Chips asignados a ${escapeHtml(container.name)} (${own.length})</summary>
+        ${own.length?own.map(t=>`<div class="apc-quick-linked"><div><b>${escapeHtml(t.label||NFC_STICKERS.find(s=>s[1]===t.uid)?.[0]||'Sticker NFC')}</b><small>${escapeHtml(t.uid)}</small></div><button type="button" class="button danger small" data-action="nfc-quick-remove" data-uid="${escapeHtml(t.uid)}" ${state.quickNfcBusy?'disabled':''}>Quitar</button></div>`).join(''):'<p class="apc-quick-help">Este recipiente todavía no tiene chips. Su QR funciona igual.</p>'}
+      </details>`:''}
+      <details class="apc-detail apc-nfc-records"><summary>Ver todos los chips registrados (${state.nfcTags.length})</summary><div class="apc-nfc-registered-list">${state.nfcTags.length?state.nfcTags.map(t=>`<div class="apc-quick-linked"><div><b>${escapeHtml(t.label||'Sticker NFC')}</b><small>${escapeHtml(t.uid)}</small></div><button type="button" class="button secondary small" data-action="nfc-pick-container" data-id="${escapeHtml(t.container_id)}">${escapeHtml(getContainer(t.container_id)?.name||'Recipiente')}</button></div>`).join(''):'<p class="apc-quick-help">Aún no hay chips vinculados.</p>'}</div></details>
+      <div class="apc-nfc-qr-note">▦ QR y NFC pueden usarse juntos. Desvincular un chip nunca elimina el QR ni las cantidades. ${container?`<button type="button" class="button secondary small" data-action="show-qr" data-id="${escapeHtml(container.id)}">Ver QR de ${escapeHtml(container.name)}</button>`:''}</div>
+    </section>`;
+}
+async function saveNfcQuick() {
+  const container=getContainer(state.quickNfcContainerId);
+  const uid=normalizeNfcUid(state.quickNfcUid);
+  state.quickNfcError='';state.quickNfcSuccess='';
+  if(!container){state.quickNfcError='Primero selecciona un recipiente.';render();return;}
+  if(!/^(?:[A-F0-9]{8}|[A-F0-9]{14}|[A-F0-9]{20})$/.test(uid)){state.quickNfcError='Selecciona un UID NFC correcto.';render();return;}
+  if(!state.nfcReady || !supabase){state.quickNfcError='Supabase NFC no está disponible. Comprueba el SQL V19.';render();return;}
+  const existing=state.nfcTags.find(t=>t.uid===uid);
+  if(existing&&existing.container_id!==container.id){state.quickNfcError='Este sticker está vinculado a otro recipiente. Primero quítalo allí.';render();return;}
+  state.quickNfcBusy=true;render();
+  try {
+    const label=cleanText(state.quickNfcLabel || NFC_STICKERS.find(s=>s[1]===uid)?.[0] || '',70);
+    let {token}=await ensureContainerToken(container);
+    let result=await supabase.rpc('apci_nfc_assign',{p_uid:uid,p_container_id:container.id,p_access_token:token,p_label:label});
+    // Si el teléfono tenía un token antiguo invalidado, emitimos otro token adicional sin revocar QR impresos.
+    if(result.error && /QR|token|acceso no autorizado|acceso qr válido/i.test(result.error.message||'')){
+      token=(await ensureContainerToken(container,true)).token;
+      result=await supabase.rpc('apci_nfc_assign',{p_uid:uid,p_container_id:container.id,p_access_token:token,p_label:label});
+    }
+    if(result.error)throw result.error;
+    await loadNfcTags();
+    if(!state.nfcTags.some(t=>t.uid===uid&&t.container_id===container.id))throw new Error('Supabase no confirmó el registro. Revisa el SQL V19.');
+    state.quickNfcSuccess=`Sticker ${uid} registrado en ${container.name}.`;
+    state.quickNfcUid='';state.quickNfcLabel='';state.quickNfcCustom=false;
+  }catch(error){
+    state.quickNfcError=error?.message||'No se guardó el sticker.';
+    console.error('APC NFC: fallo al guardar',error);
+  } finally{state.quickNfcBusy=false;render();}
+}
+async function removeNfcQuick(uid){
+  const container=getContainer(state.quickNfcContainerId);
+  if(!container||!supabase)return;
+  if(!confirm(`¿Quitar el chip ${uid} de ${container.name}? El código QR no se altera.`))return;
+  state.quickNfcBusy=true;state.quickNfcError='';state.quickNfcSuccess='';render();
+  try{
+    let {token}=await ensureContainerToken(container);
+    let result=await supabase.rpc('apci_nfc_unlink',{p_uid:uid,p_container_id:container.id,p_access_token:token});
+    if(result.error && /QR|token|acceso no autorizado|acceso qr válido/i.test(result.error.message||'')){
+      token=(await ensureContainerToken(container,true)).token;
+      result=await supabase.rpc('apci_nfc_unlink',{p_uid:uid,p_container_id:container.id,p_access_token:token});
+    }
+    if(result.error)throw result.error;
+    await loadNfcTags();
+    if(state.nfcTags.some(t=>t.uid===uid&&t.container_id===container.id))throw new Error('El chip sigue asignado. Comprueba Supabase.');
+    state.quickNfcSuccess='Sticker desvinculado. QR e inventario intactos.';
+  }catch(error){state.quickNfcError=error?.message||'No se pudo quitar el chip.';}
+  finally{state.quickNfcBusy=false;render();}
+}
+async function pickNfcContainer(id){
+  const c=getContainer(id);if(!c){notify('No se encontró el recipiente.','error');return;}
+  state.editContainerId='';state.editPhotoData=null;state.nfcManagerId='';state.qrPreview=null;
+  state.page='manage';state.manageTab='nfc';state.quickNfcContainerId=id;
+  state.qrMode=false;state.qrContainerId='';state.showEditor=false;
+  if(location.search && typeof history!=='undefined')history.replaceState({apcView:'manage'},'',BASE);
+  state.quickNfcUid='';state.quickNfcLabel='';state.quickNfcCustom=false;
+  state.quickNfcError='';state.quickNfcSuccess='';
+  await loadNfcTags();
+  render();window.scrollTo({top:0,behavior:'smooth'});
+}
+
 function renderManage() {
-  return `<div class="page-stack">${renderQrPdfSection()}${renderNfcOverview()}<section class="section-block manage-intro"><div class="section-title-row"><div><span class="eyebrow">CONFIGURACIÓN</span><h2>Crear un recipiente</h2><p>Elige su grupo, escribe el nombre y marca qué suministros guardará. También puedes añadir una fotografía.</p></div><button class="button secondary small" data-action="generate-all-qr" ${state.qrBatchBusy || !state.containers.length ? 'disabled' : ''}>${state.qrBatchBusy ? 'Generando códigos…' : '▦ Generar QR nuevos para todos'}</button></div>
-    <div class="form-card"><div class="form-field"><label for="create-kind">¿Dónde quieres clasificarlo?</label><select id="create-kind" data-state-field="createKind" class="select-kind"><option value="caja" ${state.createKind === 'caja' ? 'selected' : ''}>📦 Cajas</option><option value="tacho" ${state.createKind === 'tacho' ? 'selected' : ''}>🪣 Tachos</option><option value="otro" ${state.createKind === 'otro' ? 'selected' : ''}>▦ Otros recipientes</option></select></div><div class="form-field"><label for="create-name">Nombre del recipiente</label><input id="create-name" data-state-field="createName" value="${escapeHtml(state.createName)}" placeholder="Ej. Bandeja azul, Tacho de tapas, Estante 02" maxlength="70"></div>
-    <div class="form-field"><label for="create-description">Descripción (opcional)</label><input id="create-description" data-state-field="createDescription" value="${escapeHtml(state.createDescription)}" placeholder="Ej. Almacén junto a la cocina" maxlength="350"></div>
-    <div class="form-field"><label for="create-photo-file">Foto de referencia (opcional)</label><div class="photo-upload-row">${state.createPhotoData ? `<img class="photo-upload-preview" src="${state.createPhotoData}" alt="Foto nueva">` : '<div class="photo-upload-placeholder">📷</div>'}<div><input id="create-photo-file" data-photo-input="create" type="file" accept="image/jpeg,image/png,image/webp,image/*"><small>Haz una foto o selecciona una imagen. Se reduce de tamaño antes de guardarse.</small>${state.createPhotoData ? '<button type="button" class="button secondary small" data-action="clear-create-photo">Quitar foto</button>' : ''}</div></div></div>
-    <div class="form-field"><label>¿Qué suministros guardará?</label><p class="field-help">Puedes marcar varios. El recipiente solo mostrará los que selecciones.</p><div class="supply-choice-grid">${ITEM_DEFS.map(item => supplyChoice(item.key, state.createKeys.includes(item.key))).join('')}</div></div>
-    <fieldset class="apc-access-choice"><legend>¿Cómo quieres identificar este recipiente?</legend><p>El QR siempre se crea. El chip NFC es opcional y puedes agregarlo más tarde.</p>
-      <label class="apc-access-option ${!state.createWantNfc?'selected':''}"><input type="radio" name="create-access" data-access-create="qr" ${!state.createWantNfc?'checked':''}><span><strong>▦ Solo QR</strong><small>No necesito chip NFC por ahora.</small></span></label>
-      <label class="apc-access-option ${state.createWantNfc?'selected':''}"><input type="radio" name="create-access" data-access-create="nfc" ${state.createWantNfc?'checked':''}><span><strong>◉ QR + NFC (opcional)</strong><small>Al crear el recipiente podré elegir un sticker.</small></span></label>
-    </fieldset>
-    <div class="form-note"><strong>Importante:</strong> Las tapas Rey y GyG se contarán por separado en la web y en el informe; Supabase conservará el total combinado de tapas para mantener la base actual sin SQL nuevo.</div>
-    <button class="button primary create-button" data-action="create-container">＋ Crear recipiente y generar QR</button></div></section>
-    <section class="section-block"><div class="section-title-row"><div><span class="eyebrow">GESTIÓN</span><h2>Recipientes actuales</h2><p>Puedes consultar su QR, cambiar nombre y suministros, o eliminarlos.</p></div></div><div class="container-manage-list">${state.containers.length ? renderGroupedContainers(state.containers, renderManageCard) : '<div class="empty-state">No hay recipientes registrados.</div>'}</div></section>
-  </div>`;
+  const tabs=[['recipients','▤ Recipientes'],['create','＋ Crear'],['nfc','◉ Chips NFC'],['print','▦ Imprimir QR']];
+  const nav=`<nav class="apc-manage-tabs" aria-label="Gestión de recipientes">${tabs.map(([id,label])=>`<button class="apc-manage-tab ${state.manageTab===id?'active':''}" data-action="manage-tab" data-tab="${id}" aria-pressed="${state.manageTab===id}">${label}</button>`).join('')}</nav>`;
+  let content='';
+  if(state.manageTab==='recipients') {
+    content=`<section class="section-block apc-manage-section"><div class="section-title-row"><div><span class="eyebrow">CONTROL DE RECIPIENTES</span><h2>Mis recipientes</h2><p>Abre una tarjeta para editarla, vincular NFC o ver su QR. Los códigos impresos siguen vigentes.</p></div></div><div class="container-manage-list">${state.containers.length ? renderGroupedContainers(state.containers,renderManageCard):'<div class="empty-state">Todavía no hay recipientes.</div>'}</div></section>`;
+  } else if(state.manageTab==='create') {
+    content=`<section class="section-block apc-manage-section"><div class="section-title-row"><div><span class="eyebrow">PASO ÚNICO</span><h2>Crear recipiente</h2><p>Escribe el nombre y selecciona los suministros. El QR se crea siempre; puedes añadir NFC al terminar.</p></div></div>
+    <div class="form-card"><div class="form-field"><label for="create-name">Nombre del recipiente</label><input id="create-name" data-state-field="createName" value="${escapeHtml(state.createName)}" placeholder="Ej. Tacho azul" maxlength="70"></div>
+    <div class="form-field"><label for="create-kind">Grupo</label><select id="create-kind" data-state-field="createKind" class="select-kind"><option value="caja" ${state.createKind==='caja'?'selected':''}>Cajas</option><option value="tacho" ${state.createKind==='tacho'?'selected':''}>Tachos</option><option value="otro" ${state.createKind==='otro'?'selected':''}>Otros</option></select></div>
+    <details class="apc-detail"><summary>Descripción y fotografía (opcionales)</summary><div class="form-field"><label for="create-description">Descripción</label><input id="create-description" data-state-field="createDescription" value="${escapeHtml(state.createDescription)}" placeholder="Ubicación o uso" maxlength="350"></div><div class="form-field"><label for="create-photo-file">Fotografía</label><div class="photo-upload-row">${state.createPhotoData?`<img class="photo-upload-preview" src="${state.createPhotoData}" alt="Foto nueva">`:''}<input id="create-photo-file" data-photo-input="create" type="file" accept="image/*"></div></div></details>
+    <details class="apc-detail"><summary>Suministros que guardará (${state.createKeys.length})</summary><div class="supply-choice-grid">${ITEM_DEFS.map(item=>supplyChoice(item.key,state.createKeys.includes(item.key))).join('')}</div></details>
+    <label class="apc-after-create-nfc"><input type="checkbox" data-access-create="nfc" ${state.createWantNfc?'checked':''}><span><strong>Quiero vincular un chip NFC después</strong><small>Opcional. Después de crear, abrirás la pestaña Chips NFC para escogerlo y guardarlo.</small></span></label>
+    <div class="apc-info-light">▦ <strong>QR incluido</strong> · Siempre podrás usar el código QR.</div>
+    <button class="button primary create-button" data-action="create-container">＋ Crear recipiente</button></div></section>`;
+  } else if(state.manageTab==='nfc') {
+    content=`${renderNfcQuickPage()}`;
+  } else {
+    content=`<div class="apc-print-tools">${renderQrPdfSection()}</div>`;
+  }
+  return `<div class="page-stack apc-manage-page"><div class="apc-manage-intro"><span class="eyebrow">APC INVENTARIO</span><h2>Recipientes y códigos</h2><p>Elige una opción. QR y NFC son independientes.</p></div>${nav}${content}</div>`;
 }
 function renderManageCard(container) {
   const meta = parseMeta(container);
   const linked = state.nfcTags.filter(t => t.container_id === container.id).length;
-  return `<article class="manage-tile"><div class="manage-tile-head">${containerVisual(container)}<div><span class="eyebrow">${escapeHtml(categoryOf(container).toUpperCase())}</span><h3>${escapeHtml(container.name)}</h3><p>${escapeHtml(meta.description || 'Sin descripción')}</p></div></div><div class="manage-tile-meta"><span class="contents-chip">${escapeHtml(contentsLabel(container))}</span><strong>${formatNumber(containerTotal(container))} unidades</strong></div><div class="apc-access-status"><span>▦ QR siempre disponible</span><span>${linked ? `◉ ${linked} NFC vinculado${linked===1?'':'s'}` : '◯ Sin NFC · opcional'}</span></div><div class="manage-actions"><button class="button secondary small" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ Ver / imprimir QR</button><button class="button secondary small" data-action="open-nfc-manager" data-id="${escapeHtml(container.id)}">${linked ? '✎ Editar chips NFC' : '＋ Añadir chip NFC'}</button><button class="button secondary small" data-action="edit-container" data-id="${escapeHtml(container.id)}">✎ Editar datos y foto</button><button class="button change-content-action small" data-action="change-content" data-id="${escapeHtml(container.id)}">▣ Cambiar contenido</button><button class="button danger small" data-action="delete-container" data-id="${escapeHtml(container.id)}">Eliminar</button></div></article>`;
+  return `<article class="manage-tile"><div class="manage-tile-head">${containerVisual(container)}<div><span class="eyebrow">${escapeHtml(categoryOf(container).toUpperCase())}</span><h3>${escapeHtml(container.name)}</h3><p>${escapeHtml(meta.description || 'Sin descripción')}</p></div></div><div class="manage-tile-meta"><span class="contents-chip">${escapeHtml(contentsLabel(container))}</span><strong>${formatNumber(containerTotal(container))} unidades</strong></div><div class="apc-access-status"><span>▦ QR siempre disponible</span><span>${linked ? `◉ ${linked} NFC vinculado${linked===1?'':'s'}` : '◯ Sin NFC · opcional'}</span></div><div class="manage-actions"><button class="button secondary small" data-action="show-qr" data-id="${escapeHtml(container.id)}">▦ Ver / imprimir QR</button><button class="button secondary small" data-action="nfc-pick-container" data-id="${escapeHtml(container.id)}">${linked ? '✎ Editar chips NFC' : '＋ Vincular sticker NFC'}</button><button class="button secondary small" data-action="edit-container" data-id="${escapeHtml(container.id)}">✎ Editar datos y foto</button><button class="button change-content-action small" data-action="change-content" data-id="${escapeHtml(container.id)}">▣ Cambiar contenido</button><button class="button danger small" data-action="delete-container" data-id="${escapeHtml(container.id)}">Eliminar</button></div></article>`;
 }
 function renderEditModal() {
   if (!state.editContainerId) return '';
@@ -607,59 +731,54 @@ function renderEditModal() {
       <label class="form-field"><span>Descripción (opcional)</span><input type="text" data-state-field="editDescription" maxlength="350" value="${escapeHtml(state.editDescription)}" placeholder="Ej. Almacén junto a cocina"></label>
       <div class="form-field"><label for="edit-photo-file">Foto del recipiente</label><div class="photo-edit-preview">${photo ? `<img src="${photo}" alt="Foto actual de ${escapeHtml(container.name)}">` : '<div class="photo-large-placeholder">📷<span>Sin foto</span></div>'}</div>
       <input id="edit-photo-file" type="file" data-photo-input="edit" accept="image/jpeg,image/png,image/webp,image/*"><small>Selecciona una imagen desde tu celular. Se verá en todos los dispositivos.</small>${photo ? '<button type="button" class="button secondary small" data-action="remove-edit-photo">Quitar fotografía</button>' : ''}</div>
-      <div class="edit-content-hint">Para cambiar qué productos contiene, usa «Cambiar contenido» desde la tarjeta del recipiente. Aquí solo modificas nombre, ubicación en el menú y foto.</div>
+      <button type="button" class="button secondary apc-edit-nfc-action" data-action="nfc-pick-container" data-id="${escapeHtml(container.id)}">◉ Agregar o cambiar sticker NFC</button>
+      <div class="edit-content-hint">Puedes guardar primero los cambios de nombre y luego vincular un sticker NFC. El QR siempre se conserva.</div>
     </div>
     <footer class="edit-modal-footer"><button type="button" class="button secondary" data-action="cancel-edit">Cancelar</button><button type="button" class="button primary" data-action="save-edit" data-id="${escapeHtml(container.id)}" ${state.editSaving || state.editPhotoBusy ? 'disabled' : ''}>${state.editSaving ? 'Guardando…' : '✓ Guardar cambios'}</button></footer>
   </section></div>`;
 }
 function renderNfcOverview() {
   const linked=state.nfcTags.length;
-  return `<section class="section-block nfc-manage-overview"><div class="nfc-overview-top"><span class="nfc-overview-icon">◉</span><div><span class="eyebrow">TUS STICKERS NFC</span><h2>Acerca el celular y abre el recipiente</h2><p>El QR sigue funcionando siempre. Si quieres, vincula un chip a cualquier recipiente; también puedes editarlo o quitarlo cuando quieras.</p><strong>${linked} chips vinculados</strong></div></div>
-  ${state.nfcReady ? '' : '<div class="nfc-alert warning">Para guardar stickers primero debes ejecutar el archivo SQL V19 de esta entrega en Supabase.</div>'}
-  <div class="nfc-overview-actions"><button class="button primary" data-action="nfc-home-scan">◉ Escanear NFC</button><button class="button secondary" data-action="nfc-list-toggle">▤ Ver stickers registrados</button></div>
-  ${state.nfcListExpanded ? `<div class="nfc-registrations">${state.nfcTags.length ? state.nfcTags.map(tag=>`<div class="nfc-assignment-row"><span><strong>${escapeHtml(tag.label||tag.uid)}</strong><small>${escapeHtml(tag.uid)}</small></span><b>${escapeHtml(getContainer(tag.container_id)?.name||'Recipiente no disponible')}</b></div>`).join('') : '<p>Aún no has vinculado un sticker.</p>'}</div>` : ''}
-  </section>`;
+  return `<div class="apc-nfc-overview"><div class="apc-nfc-stats"><strong>${linked} chips vinculados</strong><span>QR disponible para todos los recipientes</span></div>
+    ${!state.nfcReady?`<div class="nfc-alert warning">No se pudo leer la tabla NFC de Supabase. ${escapeHtml(state.nfcLoadError||'Verifica que ejecutaste SQL V19.')}</div>`:''}
+    <div class="apc-nfc-overview-buttons"><button class="button primary" data-action="nfc-home-scan">◉ Escanear chip</button><button class="button secondary" data-action="nfc-list-toggle">${state.nfcListExpanded?'Ocultar':'Ver'} chips registrados</button></div>
+    ${state.nfcListExpanded?`<div class="nfc-registrations">${state.nfcTags.length?state.nfcTags.map(tag=>`<div class="nfc-assignment-row"><span><strong>${escapeHtml(tag.label||tag.uid)}</strong><small>${escapeHtml(tag.uid)}</small></span><b>${escapeHtml(getContainer(tag.container_id)?.name||'No disponible')}</b><button class="button secondary small" data-action="open-nfc-manager" data-id="${escapeHtml(tag.container_id)}">Editar</button></div>`).join(''):'<p>No hay chips vinculados. Abre un recipiente para asignar uno.</p>'}</div>`:''}
+  </div>`;
 }
 function renderNfcManager() {
-  if (!state.nfcManagerId) return '';
-  const c=getContainer(state.nfcManagerId);
-  if (!c) return '';
+  if(!state.nfcManagerId) return '';
+  const c=getContainer(state.nfcManagerId);if(!c)return '';
   const own=state.nfcTags.filter(t=>t.container_id===c.id);
   const registered=new Map(state.nfcTags.map(t=>[t.uid,t]));
-  const enabled = own.length > 0 || state.nfcSetupEnabled;
-  return `<div class="nfc-overlay"><section class="nfc-modal" role="dialog" aria-modal="true" aria-label="Elegir acceso QR y NFC">
-    <header class="nfc-modal-head"><div><span class="eyebrow">ACCESO DEL RECIPIENTE</span><h2>${escapeHtml(c.name)}</h2><p>El QR funciona siempre. Tú decides si también quieres usar un chip NFC.</p></div><button class="icon-button" data-action="close-nfc-manager" aria-label="Cerrar">×</button></header>
+  return `<div class="nfc-overlay"><section class="nfc-modal apc-nfc-modal-v21" role="dialog" aria-modal="true" aria-label="Vincular NFC a ${escapeHtml(c.name)}">
+    <header class="nfc-modal-head"><div><span class="eyebrow">QR + NFC OPCIONAL</span><h2>${escapeHtml(c.name)}</h2><p>Puedes tener QR solamente, o añadir chips. Los QR impresos no cambiarán.</p></div><button class="icon-button" data-action="close-nfc-manager" aria-label="Cerrar">×</button></header>
     <div class="nfc-modal-body">
-      <div class="apc-qr-permanent"><span>▦</span><div><strong>QR siempre disponible</strong><small>El código impreso y las cantidades no cambiarán al editar los stickers.</small></div><button class="button secondary small" data-action="nfc-view-qr">Ver QR</button></div>
-      <fieldset class="apc-access-choice"><legend>¿Quieres añadir NFC a este recipiente?</legend>
-        <label class="apc-access-option ${!enabled?'selected':''}"><input type="radio" name="nfc-mode" data-access-mode="qr" ${!enabled?'checked':''} ${state.nfcBusy?'disabled':''}><span><strong>Solo QR</strong><small>No usar chip NFC. Puedo agregar uno después.</small></span></label>
-        <label class="apc-access-option ${enabled?'selected':''}"><input type="radio" name="nfc-mode" data-access-mode="nfc" ${enabled?'checked':''} ${state.nfcBusy?'disabled':''}><span><strong>QR + chip NFC (opcional)</strong><small>Puedo asignar, cambiar o retirar stickers sin perder el QR.</small></span></label>
-      </fieldset>
-      ${enabled ? `
-      <h3>${own.length ? 'Editar o agregar chips NFC' : 'Elige un chip NFC para vincular'}</h3>
-      <div class="nfc-field"><label for="nfc-uid">Código del sticker (UID)</label><input id="nfc-uid" type="text" maxlength="32" spellcheck="false" autocapitalize="characters" autocomplete="off" data-state-field="nfcUidDraft" placeholder="53EA69F3640001" value="${escapeHtml(state.nfcUidDraft)}"><small>Selecciona uno de tus stickers o escribe su UID.</small></div>
-      <div class="nfc-sticker-pills">${NFC_STICKERS.map(([label,uid])=>{const tag=registered.get(uid);const other=tag&&tag.container_id!==c.id;return `<button class="nfc-sticker-pill ${state.nfcUidDraft===uid?'chosen':''} ${other?'taken':''}" data-action="choose-nfc-uid" data-uid="${uid}" ${other?'disabled':''}><strong>${escapeHtml(label)}</strong><small>${uid}</small><span>${other?'Ya asignado a '+escapeHtml(getContainer(tag.container_id)?.name||'otro') : tag?'Asignado aquí':'Libre'}</span></button>`;}).join('')}</div>
-      <button class="button secondary nfc-random" data-action="choose-free-nfc">↻ Elegir uno de mis stickers libres</button>
-      <div class="nfc-field"><label for="nfc-label">Nombre del sticker (opcional)</label><input id="nfc-label" type="text" maxlength="70" data-state-field="nfcLabelDraft" value="${escapeHtml(state.nfcLabelDraft)}" placeholder="Ejemplo: Sticker de ${escapeHtml(c.name)}"></div>
-      <div class="nfc-actions-inline"><button class="button secondary" data-action="nfc-assign-scan">◉ Leer chip acercándolo</button><button class="button primary" data-action="nfc-save" ${state.nfcBusy||!state.nfcReady?'disabled':''}>${state.nfcBusy?'Guardando…':'✓ Guardar chip'}</button></div>
-      ` : '<p class="nfc-alert note">Este recipiente funciona solo con su QR. No necesitas comprar ni asignar ningún sticker para contar.</p>'}
-      ${own.length ? `<h3>Chips actualmente vinculados (${own.length})</h3><div class="nfc-linked-list">${own.map(tag=>`<div class="nfc-linked-item"><div><strong>${escapeHtml(tag.label || tag.uid)}</strong><small>${escapeHtml(tag.uid)}</small></div><div><button class="button secondary small" data-action="choose-nfc-uid" data-uid="${escapeHtml(tag.uid)}">Editar</button><button class="button danger small" data-action="nfc-remove" data-uid="${escapeHtml(tag.uid)}" ${state.nfcBusy?'disabled':''}>Quitar</button></div></div>`).join('')}</div>` : ''}
-      ${!state.nfcReady?'<div class="nfc-alert warning">Para guardar chips, ejecuta el SQL NFC V19 en Supabase. El QR sigue funcionando sin ese SQL.</div>':''}
-      <div class="nfc-alert note"><strong>Importante:</strong> Al elegir «Solo QR» para un recipiente que ya tiene stickers, te pediremos confirmar antes de desvincularlos. No se borran los chips físicos, el QR ni el inventario.</div>
-    </div>
-    <footer class="nfc-modal-foot"><button class="button secondary" data-action="close-nfc-manager">Terminar</button></footer>
+      <div class="apc-qr-permanent"><span>▦</span><div><strong>QR siempre activo</strong><small>No se elimina ni renueva al guardar un chip.</small></div><button class="button secondary small" data-action="nfc-view-qr">Ver QR</button></div>
+      ${own.length?`<div class="apc-existing-tags"><h3>Chips vinculados (${own.length})</h3>${own.map(t=>`<div class="apc-existing-tag"><div><strong>${escapeHtml(t.label||'Chip NFC')}</strong><small>${escapeHtml(t.uid)}</small></div><button class="button danger small" data-action="nfc-remove" data-uid="${escapeHtml(t.uid)}" ${state.nfcBusy?'disabled':''}>Quitar</button></div>`).join('')}</div>`:''}
+      <div class="apc-nfc-add"><h3>${own.length?'Añadir otro o cambiar de chip':'Añadir chip NFC (opcional)'}</h3>
+        <p class="field-help">Puedes acercar el sticker a tu teléfono o seleccionar uno de los códigos que ya tienes.</p>
+        <button class="button primary apc-scan-large" data-action="nfc-assign-scan" ${state.nfcBusy?'disabled':''}>◉ Escanear sticker con NFC</button>
+        <details class="apc-detail"><summary>O elegir un código de mis stickers</summary><div class="apc-nfc-uid-pills">${NFC_STICKERS.map(([label,uid])=>{const tag=registered.get(uid);const usedElsewhere=tag&&tag.container_id!==c.id;return `<button type="button" class="nfc-sticker-pill ${state.nfcUidDraft===uid?'chosen':''}" data-action="choose-nfc-uid" data-uid="${uid}" ${usedElsewhere?'disabled':''}><strong>${escapeHtml(label)}</strong><small>${uid}</small><span>${usedElsewhere?'En '+escapeHtml(getContainer(tag.container_id)?.name||'otro recipiente'):tag?'Aquí':'Libre'}</span></button>`;}).join('')}</div></details>
+        <div class="nfc-field"><label for="nfc-uid">Código NFC seleccionado</label><input id="nfc-uid" data-state-field="nfcUidDraft" maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Ej. 53EA69F3640001" value="${escapeHtml(state.nfcUidDraft)}"><small>También puedes escribir el UID manualmente.</small></div>
+        <details class="apc-detail"><summary>Nombre para el chip (opcional)</summary><input id="nfc-label" data-state-field="nfcLabelDraft" maxlength="70" placeholder="Ej. Sticker azul" value="${escapeHtml(state.nfcLabelDraft)}"></details>
+        ${state.nfcManagerError?`<div class="nfc-alert error" role="alert">${escapeHtml(state.nfcManagerError)}</div>`:''}
+        <button class="button primary apc-nfc-save-large" data-action="nfc-save" ${state.nfcBusy||!state.nfcReady||!state.nfcUidDraft?'disabled':''}>${state.nfcBusy?'Guardando…':'✓ Vincular chip al recipiente'}</button>
+        <p class="field-help">«Cerrar» no guarda. Primero pulsa «Vincular chip». Si no deseas NFC, simplemente cierra esta ventana.</p>
+      </div>
+      ${!state.nfcReady?`<div class="nfc-alert warning">No se puede guardar: ${escapeHtml(state.nfcLoadError||'Falta configurar Supabase NFC V19.')}</div>`:''}
+    </div><footer class="nfc-modal-foot"><button class="button secondary" data-action="close-nfc-manager">Cerrar</button></footer>
   </section></div>`;
 }
 function renderNfcScanModal() {
   if (!state.nfcScanOpen) return '';
   const scanText=state.nfcScanning?'Acerca tu sticker NFC a la parte trasera del teléfono.':'Pulsa Leer NFC y acerca el sticker.';
   return `<div class="nfc-overlay"><section class="nfc-scan-modal" role="dialog" aria-modal="true" aria-label="Lector NFC">
-    <div class="nfc-modal-head"><div><span class="eyebrow">LECTOR DE STICKERS</span><h2>${state.nfcScanMode==='assign'?'Detectar código NFC':'Abrir recipiente con NFC'}</h2></div><button class="icon-button" data-action="nfc-scan-close" aria-label="Cerrar">×</button></div>
+    <div class="nfc-modal-head"><div><span class="eyebrow">LECTOR DE STICKERS</span><h2>${state.nfcScanMode==='assign'||state.nfcScanMode==='quick-assign'?'Detectar código NFC':'Abrir recipiente con NFC'}</h2></div><button class="icon-button" data-action="nfc-scan-close" aria-label="Cerrar">×</button></div>
     <div class="nfc-scan-symbol ${state.nfcScanning?'is-scanning':''}">◉</div>
     <p class="nfc-reader-instructions">${scanText}</p>
     ${state.nfcScanError?`<div class="nfc-alert error" role="alert"><strong>${state.nfcLastUid?'Sticker no reconocido':'No se pudo leer NFC'}</strong><p>${escapeHtml(state.nfcScanError)}</p>${state.nfcLastUid?`<small>UID detectado: ${escapeHtml(state.nfcLastUid)}</small>`:''}</div>`:''}
     <div class="nfc-scan-actions"><button class="button secondary" data-action="nfc-scan-close">Cancelar</button><button class="button primary" data-action="nfc-scan-start">${state.nfcScanning?'Volver a intentar':'◉ Leer NFC'}</button></div>
-    <small class="nfc-help">Activa NFC en Ajustes. En Chrome de Android puede requerir permiso; la APK nueva permite leer UID de chips sin grabar.</small>
+    <small class="nfc-help">Abre la web en Chrome de Android, activa NFC y pulsa «Leer NFC». Si tu sticker no es compatible con NDEF, utiliza su código escrito.</small>
   </section></div>`;
 }
 function renderMovements() {
@@ -675,7 +794,7 @@ function renderMorePage() {
     <section class="more-list" aria-label="Opciones de APC">
       <button class="more-action featured" data-action="check-updates"><span class="more-action-icon">↻</span><span class="more-action-text"><strong>Buscar actualización</strong><small>${inAndroid ? 'Comprueba si hay una nueva APK en GitHub' : 'Comprueba si hay una nueva versión de la web'}</small></span><span class="more-action-arrow">›</span></button>
       ${window.APCAndroid?.scanQr ? '<button class="more-action" data-action="native-scan"><span class="more-action-icon">▣</span><span class="more-action-text"><strong>Escanear código QR</strong><small>Lector de respaldo para las etiquetas impresas</small></span><span class="more-action-arrow">›</span></button>' : ''}
-      <button class="more-action" data-action="navigate" data-page="manage"><span class="more-action-icon">▣</span><span class="more-action-text"><strong>Recipientes y códigos QR</strong><small>Crear, editar, imprimir o consultar QR</small></span><span class="more-action-arrow">›</span></button>
+      <button class="more-action" data-action="navigate" data-page="manage"><span class="more-action-icon">▣</span><span class="more-action-text"><strong>Recipientes y QR / NFC</strong><small>Crear, editar, imprimir o vincular stickers</small></span><span class="more-action-arrow">›</span></button>
       <button class="more-action" data-action="navigate" data-page="protocol"><span class="more-action-icon">▤</span><span class="more-action-text"><strong>Protocolo administrativo</strong><small>Instrucciones del comedor</small></span><span class="more-action-arrow">›</span></button>
       <button class="more-action" data-action="navigate" data-page="movements"><span class="more-action-icon">◷</span><span class="more-action-text"><strong>Historial de conteos</strong><small>Movimientos e informes del inventario</small></span><span class="more-action-arrow">›</span></button>
     </section>
@@ -700,7 +819,7 @@ function renderMobileNav() {
 let lastRenderedSignature = '';
 function render() {
   // Los eventos de Supabase no deben desmontar un input activo mientras se escribe.
-  const editing = document.activeElement?.matches?.('.quantity-input, #clear-history-pin, .edit-modal input[type=text], .edit-modal select, .form-card input[type=text], .nfc-modal input');
+  const editing = document.activeElement?.matches?.('.quantity-input, #clear-history-pin, .edit-modal input[type=text], .edit-modal select, .form-card input[type=text], .nfc-modal input, [data-quick-nfc-manual]');
   const signature = [state.page, state.selectedContainer, state.showEditor, state.qrMode, state.clearHistoryOpen, state.productDetailKey, state.nfcManagerId, state.nfcScanOpen].join('|');
   if (editing && signature === lastRenderedSignature && !state.loading) {
     const oldToast = ROOT.querySelector('.toast');
@@ -721,7 +840,7 @@ function render() {
     <main class="main-area"><header class="page-header"><div><span class="eyebrow">APC CORPORACIÓN</span><h1>${title}</h1></div><div class="header-actions"><span class="connection-pill ${state.online ? 'online' : 'offline'}">● ${state.online ? 'En línea' : 'Sin internet'}</span><button class="icon-button" data-action="refresh" title="Actualizar inventario">↻</button></div></header>
       ${state.loading ? '<div class="loading-card"><span class="spinner"></span><strong>Cargando inventario…</strong></div>' : state.page === 'home' ? renderHome() : state.page === 'containers' ? renderContainersPage() : state.page === 'manage' ? renderManage() : state.page === 'movements' ? renderMovements() : state.page === 'more' ? renderMorePage() : renderProtocol()}
     </main>
-    ${renderMobileNav()}${renderUpdateNotice()}${renderNfcManager()}${renderNfcScanModal()}${renderQrModal()}${renderQrHelpModal()}${renderClearHistoryModal()}${renderProductDetailModal()}${renderEditModal()}${state.contentEditOpen ? '<div class="content-modal-backdrop"><div id="react-content-editor"></div></div>' : ''}${state.toast ? `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}
+    ${renderMobileNav()}${renderUpdateNotice()}${renderNfcScanModal()}${renderQrModal()}${renderQrHelpModal()}${renderClearHistoryModal()}${renderProductDetailModal()}${renderEditModal()}${state.contentEditOpen ? '<div class="content-modal-backdrop"><div id="react-content-editor"></div></div>' : ''}${state.toast ? `<div class="toast ${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}
   </div>`;
   mountReactContentEditor();
 }
@@ -961,10 +1080,11 @@ async function createContainer() {
   state.createWantNfc = false;
   await reloadData();
   const current = getContainer(id) || { id, name: savedName };
+  state.manageTab='recipients';
   state.qrPreview = { containerId: id, name: current.name || savedName, url: getQrUrl(id, token), created: true };
   state.qrBatchPreview = [];
   state.page = 'manage';
-  if (wantNfc) { state.nfcManagerId=id; state.nfcSetupEnabled=true; state.qrPreview=null; state.nfcUidDraft=''; state.nfcLabelDraft=''; }
+  if (wantNfc) { state.manageTab='nfc'; state.quickNfcContainerId=id; state.qrPreview=null; state.quickNfcUid=''; state.quickNfcLabel=''; state.quickNfcError=''; state.quickNfcSuccess=''; }
   render();
   if (photoError) notify(`${savedName} creado, pero la foto no se pudo guardar. Ejecuta SQL V17.`, 'error'); else notify(`${savedName} creado correctamente.`);
 }
@@ -1344,7 +1464,7 @@ function startNfcScan(mode='find') {
   state.nfcScanning=false;
   state.nfcScanError=''; state.nfcLastUid='';
   render();
-  beginNfcRead();
+  // La lectura se inicia únicamente al pulsar el botón, para pedir el permiso con un gesto del usuario.
 }
 async function beginNfcRead() {
   if (state.nfcScanning && nfcAbortController) nfcAbortController.abort();
@@ -1353,14 +1473,14 @@ async function beginNfcRead() {
   if (window.APCAndroid?.scanNfc) { window.APCAndroid.scanNfc(); return; }
   if (!('NDEFReader' in window)) {
     state.nfcScanning=false;
-    state.nfcScanError='Este navegador no permite leer NFC. Abre la web en Chrome de Android o instala la APK NFC nueva.';
+    state.nfcScanError='Este navegador no permite leer NFC. Usa Chrome en Android o escribe el UID de tu sticker manualmente.';
     render(); return;
   }
   try {
     const controller=new AbortController(); nfcAbortController=controller;
     const reader=new NDEFReader();
     reader.addEventListener('reading', event=>{ controller.abort(); window.APCNfcScanned(event.serialNumber || ''); }, {once:true});
-    reader.addEventListener('readingerror', ()=>{state.nfcScanning=false;state.nfcScanError='No se pudo leer el chip. Si está en blanco, prueba la APK NFC nueva.';render();});
+    reader.addEventListener('readingerror', ()=>{state.nfcScanning=false;state.nfcScanError='No se pudo leer el chip en formato NDEF. Puedes introducir el UID manualmente.';render();});
     await reader.scan({signal:controller.signal});
   } catch(error) {
     if(error?.name==='AbortError')return;
@@ -1374,10 +1494,19 @@ window.APCNfcScanned = async raw => {
   const uid=normalizeNfcUid(raw);
   state.nfcScanning=false; nfcAbortController?.abort(); nfcAbortController=null;
   if (window.APCAndroid?.stopNfc) try { window.APCAndroid.stopNfc(); } catch {}
-  if(!uid){state.nfcScanError='Se detectó un chip, pero no se pudo leer su UID. Prueba desde la APK NFC.';render();return;}
+  if(!uid){state.nfcScanError='El chip no devolvió un UID. Introduce el código manualmente.';render();return;}
   state.nfcLastUid=uid;
+  if (state.nfcScanMode==='quick-assign') {
+    state.nfcScanOpen=false;
+    state.quickNfcUid=uid;
+    state.quickNfcLabel=NFC_STICKERS.find(s=>s[1]===uid)?.[0]||'';
+    state.quickNfcCustom=!NFC_STICKERS.some(s=>s[1]===uid);
+    state.quickNfcError='';state.quickNfcSuccess='';
+    state.page='manage';state.manageTab='nfc';
+    render();return;
+  }
   if (state.nfcScanMode==='assign') {
-    state.nfcScanOpen=false;state.nfcUidDraft=uid;
+    state.nfcScanOpen=false;state.nfcUidDraft=uid;state.nfcManagerError='';
     const entry=state.nfcTags.find(t=>t.uid===uid);
     state.nfcLabelDraft=entry?.label || NFC_STICKERS.find(s=>s[1]===uid)?.[0] || '';
     render();return;
@@ -1431,22 +1560,24 @@ async function saveNfcAssignment() {
   const container=getContainer(state.nfcManagerId);
   if(!container || state.nfcBusy)return;
   const uid=normalizeNfcUid(state.nfcUidDraft);
+  state.nfcManagerError='';
   if(!/^(?:[A-F0-9]{8}|[A-F0-9]{14}|[A-F0-9]{20})$/.test(uid)){
-    notify('UID no válido. Comprueba los 14 caracteres hexadecimales de tu sticker.','error');return;
+    state.nfcManagerError='Código NFC no válido. Comprueba el UID hexadecimal del sticker.';render();return;
   }
   const used=state.nfcTags.find(t=>t.uid===uid);
-  if(used && used.container_id!==container.id){notify('Este sticker ya pertenece a otro recipiente. Quítalo primero desde allí.','error');return;}
-  if(!state.nfcReady){notify('Primero ejecuta el SQL V19 en Supabase.','error');return;}
+  if(used && used.container_id!==container.id){state.nfcManagerError='Este sticker ya está vinculado a '+(getContainer(used.container_id)?.name||'otro recipiente')+'.';render();return;}
+  if(!state.nfcReady){state.nfcManagerError='No está disponible la tabla NFC. Revisa SQL V19 en Supabase.';render();return;}
   state.nfcBusy=true;render();
   try {
     const {token}=await ensureContainerToken(container);
     const {error}=await supabase.rpc('apci_nfc_assign',{p_uid:uid,p_container_id:container.id,p_access_token:token,p_label:cleanText(state.nfcLabelDraft,70)});
     if(error)throw error;
     await loadNfcTags();
-    state.nfcSetupEnabled=true;
+    if(!state.nfcTags.some(t=>t.uid===uid&&t.container_id===container.id))throw new Error('No se pudo confirmar el registro. Revisa Supabase.');
+    state.nfcSetupEnabled=true;state.nfcManagerError='';
     state.nfcUidDraft='';state.nfcLabelDraft='';
-    notify(`Sticker vinculado a ${container.name}. Acércalo para abrir el conteo.`);
-  } catch(e) { notify(e?.message||'No se pudo asignar el NFC.','error'); }
+    notify(`Chip ${uid} vinculado a ${container.name}.`);
+  } catch(e) { state.nfcManagerError=e?.message||'No se pudo asignar el chip.';notify('No se guardó el chip NFC. Revisa el aviso en pantalla.','error'); } 
   finally {state.nfcBusy=false;render();}
 }
 async function removeNfcAssignment(uid) {
@@ -1484,17 +1615,22 @@ ROOT.addEventListener('click', async event => {
   if (action === 'navigate') { navigate(actionNode.dataset.page); return; }
   if (action === 'open-menu') { state.menuOpen = true; render(); return; }
   if (action === 'close-menu') { if (event.target.closest('.mobile-drawer') && !event.target.closest('[data-action="close-menu"]')) return; state.menuOpen = false; render(); return; }
+  if (action === 'manage-tab') { state.manageTab=actionNode.dataset.tab||'recipients'; if(state.manageTab==='nfc')await loadNfcTags();render();window.scrollTo({top:0,behavior:'smooth'});return; }
   if (action === 'nfc-home-scan') { startNfcScan('find'); return; }
+  if (action === 'nfc-pick-container') { await pickNfcContainer(id); return; }
+  if (action === 'nfc-quick-scan') { if (!getContainer(state.quickNfcContainerId)) { notify('Elige un recipiente primero.','error');return;} startNfcScan('quick-assign');return; }
+  if (action === 'nfc-quick-save') { document.activeElement?.blur?.(); await saveNfcQuick();return; }
+  if (action === 'nfc-quick-remove') { document.activeElement?.blur?.(); await removeNfcQuick(actionNode.dataset.uid);return; }
   if (action === 'nfc-list-toggle') { state.nfcListExpanded=!state.nfcListExpanded; render(); return; }
   if (action === 'nfc-scan-start') { await beginNfcRead(); return; }
   if (action === 'nfc-scan-close') { closeNfcScan(); return; }
-  if (action === 'open-nfc-manager') { state.nfcManagerId=id; state.nfcUidDraft=''; state.nfcLabelDraft=''; await loadNfcTags(); state.nfcSetupEnabled=state.nfcTags.some(t=>t.container_id===id);render(); return; }
-  if (action === 'qr-open-nfc') { const cid=state.qrPreview?.containerId; if(!cid)return;state.qrPreview=null;state.nfcManagerId=cid;state.nfcUidDraft='';state.nfcLabelDraft='';await loadNfcTags();state.nfcSetupEnabled=state.nfcTags.some(t=>t.container_id===cid);render();return; }
+  if (action === 'open-nfc-manager') { await pickNfcContainer(id); return; }
+  if (action === 'qr-open-nfc') { const cid=state.qrPreview?.containerId; if(cid)await pickNfcContainer(cid);return; }
   if (action === 'nfc-view-qr') { const c=getContainer(state.nfcManagerId); if(!c)return;state.nfcManagerId='';state.nfcSetupEnabled=false;await openQr(c);return; }
   if (action === 'close-nfc-manager') { state.nfcManagerId=''; state.nfcSetupEnabled=false;state.nfcUidDraft=''; state.nfcLabelDraft=''; render(); return; }
-  if (action === 'choose-nfc-uid') { const uid=normalizeNfcUid(actionNode.dataset.uid);const assigned=state.nfcTags.find(t=>t.uid===uid);state.nfcUidDraft=uid;state.nfcLabelDraft=assigned?.label||NFC_STICKERS.find(v=>v[1]===uid)?.[0]||'';render(); return; }
+  if (action === 'choose-nfc-uid') { state.nfcManagerError=''; const uid=normalizeNfcUid(actionNode.dataset.uid);const assigned=state.nfcTags.find(t=>t.uid===uid);state.nfcUidDraft=uid;state.nfcLabelDraft=assigned?.label||NFC_STICKERS.find(v=>v[1]===uid)?.[0]||'';render(); return; }
   if (action === 'choose-free-nfc') { const free=NFC_STICKERS.filter(([,uid])=>!state.nfcTags.some(t=>t.uid===uid)); if(!free.length){notify('Tus nueve stickers ya están asignados. Puedes ingresar otro UID o quitar uno.','error');return;} const [label,uid]=free[Math.floor(Math.random()*free.length)];state.nfcUidDraft=uid;state.nfcLabelDraft=label;render();return; }
-  if (action === 'nfc-assign-scan') { startNfcScan('assign'); return; }
+  if (action === 'nfc-assign-scan') { state.nfcManagerError=''; startNfcScan('assign'); return; }
   if (action === 'nfc-save') { await saveNfcAssignment(); return; }
   if (action === 'nfc-remove') { await removeNfcAssignment(actionNode.dataset.uid); return; }
   if (action === 'native-scan') { if (window.APCAndroid?.scanQr) window.APCAndroid.scanQr(); else navigate('containers'); return; }
@@ -1513,6 +1649,7 @@ ROOT.addEventListener('click', async event => {
   if (action === 'show-qr') { const container = getContainer(id); if (container) await openQr(container); return; }
   if (action === 'qr-pdf-select-all') { state.qrPdfOmittedIds=[]; render(); return; }
   if (action === 'qr-pdf-select-none') { state.qrPdfOmittedIds=state.containers.map(c=>c.id); render(); return; }
+  if (action === 'qr-pdf-prepare-missing') { await prepareMissingQrForPdf(); return; }
   if (action === 'qr-pdf-download') { await downloadQrPdf(); return; }
   if (action === 'qr-pdf-import') { importExistingQrLink(id); return; }
   if (action === 'generate-all-qr') { await generateAllQr(); return; }
@@ -1573,7 +1710,15 @@ ROOT.addEventListener('input', event => {
     if (raw !== input.value) input.value = raw;
     state.drafts[`${input.dataset.container}:${input.dataset.qtyInput}`] = raw;
   }
-  if (input.matches('[data-state-field]')) state[input.dataset.stateField] = input.value;
+  if (input.matches('[data-state-field]')) {
+    state[input.dataset.stateField] = input.value;
+    if(input.dataset.stateField==='nfcUidDraft'){const btn=ROOT.querySelector('[data-action=nfc-save]');if(btn)btn.disabled=state.nfcBusy||!state.nfcReady||!input.value.trim();}
+  }
+  if(input.matches('[data-quick-nfc-manual]')) {
+    state.quickNfcUid=normalizeNfcUid(input.value);
+    const save=ROOT.querySelector('[data-action="nfc-quick-save"]');
+    if(save)save.disabled=!state.quickNfcContainerId||!state.nfcReady||!state.quickNfcUid||state.quickNfcBusy;
+  }
   if (input.matches('[data-qr-pdf-link]')) state.qrPdfLinkDrafts[input.dataset.qrPdfLink] = input.value;
 });
 ROOT.addEventListener('focusout', event => {
@@ -1585,7 +1730,18 @@ ROOT.addEventListener('focusout', event => {
 });
 ROOT.addEventListener('change', async event => {
   const input = event.target;
-  if (input.matches('[data-access-create]')) { state.createWantNfc=input.dataset.accessCreate==='nfc';render();return; }
+  if(input.matches('[data-quick-nfc-container]')) {
+    state.quickNfcContainerId=input.value;
+    state.quickNfcUid='';state.quickNfcLabel='';state.quickNfcCustom=false;
+    state.quickNfcError='';state.quickNfcSuccess='';render();return;
+  }
+  if(input.matches('[data-quick-nfc-uid]')) {
+    state.quickNfcCustom=input.value==='manual';
+    state.quickNfcUid=state.quickNfcCustom?'':input.value;
+    state.quickNfcLabel=NFC_STICKERS.find(s=>s[1]===input.value)?.[0]||'';
+    state.quickNfcError='';state.quickNfcSuccess='';render();return;
+  }
+  if (input.matches('[data-access-create]')) { state.createWantNfc=input.checked;return; }
   if (input.matches('[data-access-mode]')) { await setNfcAccessMode(input.dataset.accessMode);return; }
   if (input.matches('select[data-state-field]')) { state[input.dataset.stateField] = input.value; return; }
   if (input.matches('[data-photo-input]')) {

@@ -513,3 +513,82 @@ button:focus-visible,input:focus-visible{outline:3px solid rgba(21,150,107,.25);
 
 .editor-reference-photo{display:block;max-width:min(230px,100%);width:100%;height:140px;object-fit:cover;border-radius:13px;border:1px solid #d7e6e9;margin:10px 0 9px;background:#fff}
 @media(max-width:620px){.editor-reference-photo{max-width:100%;height:180px}}
+
+
+/* APC V21: gestión compacta, teléfono primero */
+.apc-manage-intro{padding:4px 2px 0}.apc-manage-intro h2{font-size:clamp(23px,4vw,30px);margin:2px 0 5px;color:#123a60}.apc-manage-intro p{font-size:14px;color:#677d8b;margin:0 0 4px}
+.apc-manage-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;position:relative;z-index:1}
+.apc-manage-tab{min-height:57px;background:#fff;border:1.5px solid #d9e5ec;border-radius:14px;color:#244763;font-size:14px;font-weight:800;padding:9px;cursor:pointer}
+.apc-manage-tab.active{background:#eaf8f2;color:#087950;border-color:#16a177;box-shadow:0 4px 9px #0a795b12}
+.apc-manage-section{margin-top:2px}.apc-manage-section>.section-title-row{margin-bottom:18px}
+.apc-manage-page .section-title-row p{max-width:65ch}
+.apc-detail{border:1.5px solid #dde8ed;border-radius:15px;background:#fff;margin:12px 0;padding:0 13px;overflow:hidden}
+.apc-detail>summary{padding:17px 4px;color:#143b60;font-weight:800;cursor:pointer;font-size:15px;list-style-position:inside}
+.apc-detail[open]>summary{border-bottom:1px solid #edf2f4;margin-bottom:12px}
+.apc-detail>.form-field,.apc-detail>.supply-choice-grid{margin:12px 3px}
+.apc-info-light{background:#f0faf5;border:1px solid #cce9da;border-radius:12px;padding:14px;color:#196247;font-size:14px;margin:12px 0}
+.apc-after-create-nfc{display:flex;gap:12px;align-items:center;padding:14px;border:1px solid #cde2d7;background:#f5fbf7;border-radius:14px}.apc-after-create-nfc input{width:24px;height:24px;accent-color:#10966f}.apc-after-create-nfc span{display:grid;gap:4px}.apc-after-create-nfc small{color:#6a7c84}
+.apc-qr-prepare{border:1px solid #f3d9aa;background:#fffbf3;padding:15px;border-radius:15px;color:#765328;margin-bottom:16px}
+.apc-qr-prepare p{margin:7px 0 13px;font-size:13px;line-height:1.45}.apc-qr-prepare .button{width:100%}
+.apc-pdf-buttons{display:flex;gap:9px;flex-wrap:wrap}.apc-pdf-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:13px 0}
+.apc-pdf-choice{display:flex;align-items:center;gap:7px;border:1px solid #e0eaf0;padding:10px;border-radius:12px;font-size:13px;min-width:0}.apc-pdf-choice img{width:27px;height:27px;object-fit:contain}.apc-pdf-choice input{accent-color:#139875;width:19px;height:19px}.apc-pdf-choice b{overflow-wrap:anywhere}
+.apc-qr-export-bottom{display:grid;gap:10px;margin-top:14px}.apc-qr-export-bottom select{min-height:50px;border-radius:12px;border:1px solid #cfdde5;padding:10px;font-size:16px}.apc-qr-export-bottom button{min-height:54px}
+.apc-nfc-overview{display:grid;gap:15px}.apc-nfc-stats{border-radius:15px;padding:14px 17px;background:#eef8f3;display:flex;justify-content:space-between;gap:9px;align-items:center;flex-wrap:wrap}.apc-nfc-stats strong{font-size:18px;color:#0f7a55}.apc-nfc-stats span{font-size:12px;color:#527061}
+.apc-nfc-overview-buttons{display:flex;gap:8px}.apc-nfc-overview-buttons .button{flex:1;min-width:0}
+.apc-nfc-recipient-list{margin-top:14px;display:grid;gap:8px}.apc-nfc-recipient-list h3{margin:4px 0 8px}.apc-nfc-recipient{display:flex;align-items:center;gap:10px;padding:14px 12px;min-height:68px;text-align:left;border:1px solid #dfebef;border-radius:13px;background:#fff;color:#193e5d;cursor:pointer}.apc-nfc-recipient>span{display:flex;align-items:center;gap:9px;flex:1;min-width:0}.apc-nfc-recipient img{width:35px;height:35px;object-fit:contain}.apc-nfc-recipient small{color:#667d88}.apc-nfc-recipient>strong{color:#0b916a;white-space:nowrap;font-size:12px}
+.apc-nfc-modal-v21{max-width:640px}.apc-nfc-modal-v21 .nfc-modal-body{display:grid;gap:16px}.apc-nfc-add{display:grid;gap:12px}.apc-nfc-add h3{margin:3px 0 0}.apc-nfc-add .button{min-height:56px;font-size:16px}.apc-existing-tags{border:1px solid #dce6eb;padding:12px;border-radius:13px}.apc-existing-tag{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-top:1px solid #edf2f4}.apc-existing-tag>div{display:grid;gap:4px}.apc-existing-tag small{color:#66808d;font-size:12px}.apc-nfc-uid-pills{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:9px 0}.apc-nfc-uid-pills .nfc-sticker-pill{min-width:0;overflow-wrap:anywhere}
+@media(max-width:700px){
+ .apc-manage-page{gap:12px!important}.apc-manage-tabs{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.apc-manage-tab{font-size:15px;min-height:55px}.apc-manage-section{padding:16px!important}.apc-manage-section h2{font-size:23px}.apc-nfc-overview-buttons{flex-direction:column}.apc-pdf-choices{grid-template-columns:1fr}.apc-nfc-recipient{flex-wrap:wrap}.apc-nfc-recipient>small{order:3;width:100%;padding-left:40px}.apc-nfc-recipient>strong{font-size:13px}.apc-qr-export-bottom select{width:100%}.apc-nfc-modal-v21 .nfc-modal-head{padding:17px}.apc-nfc-modal-v21 .nfc-modal-body{padding:15px}.apc-nfc-uid-pills{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+/* APC Inventario V22 — móvil primero: QR permanente + asignación NFC en 3 pasos */
+.apc-manage-page{max-width:1100px;margin:0 auto;gap:14px!important}
+.apc-manage-intro{padding:2px 3px 3px}
+.apc-manage-intro p{font-size:14px}
+.apc-manage-tabs{position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;background:transparent}
+.apc-manage-tab{border-radius:15px!important;min-height:64px!important;background:#fff!important;border:1px solid #d9e7eb!important;color:#254b63!important;box-shadow:0 2px 7px rgba(16,45,70,.045);font-size:15px!important;font-weight:800!important;padding:10px 5px!important}
+.apc-manage-tab.active{background:#e7f6ef!important;border:2px solid #159c6b!important;color:#087253!important}
+.apc-manage-section{border-radius:20px!important;box-shadow:0 4px 16px rgba(22,60,82,.045)}
+.apc-manage-section .section-title-row h2{margin-bottom:5px}
+.apc-nfc-quick{max-width:770px;margin:0 auto;width:100%}
+.apc-quick-step{border:1px solid #dbe7ed;border-radius:16px;padding:15px;display:grid;gap:11px;margin-top:12px;background:#fff}
+.apc-quick-step:nth-of-type(2){background:#f9fcfe}
+.apc-quick-title{display:flex;gap:9px;align-items:center;font-size:17px;color:#143c5f}
+.apc-quick-title>span{border-radius:50%;width:29px;height:29px;display:grid;place-items:center;flex-shrink:0;font-weight:900;background:#e4f6ee;color:#117650}
+.apc-quick-step select,.apc-quick-manual input{min-height:54px;width:100%;max-width:100%;border:1px solid #cbdce4;border-radius:13px;background:white;padding:11px 13px;color:#173c5f;font-size:16px;font-family:inherit}
+.apc-quick-step select:focus,.apc-quick-manual input:focus{outline:3px solid #b3e5d0;border-color:#129e73}
+.apc-quick-scan{min-height:56px;font-size:17px!important;border:2px solid #b9dcd1!important;color:#096f50!important;background:#edfaf4!important}
+.apc-nfc-main-save{min-height:60px;font-size:18px!important;white-space:normal}
+.apc-quick-help{font-size:13px!important;color:#667f8d!important;line-height:1.45;margin:0}
+.apc-quick-disabled{opacity:.65}
+.apc-quick-manual{display:grid;gap:5px;font-size:14px;font-weight:750;color:#294e64}
+.apc-nfc-selected-uid{padding:9px 11px;background:#eaf8f3;border:1px solid #d0ecdf;border-radius:11px;font-size:13px;color:#176e52;overflow-wrap:anywhere}
+.apc-nfc-selected-uid strong{font-size:15px}
+.apc-quick-linked{display:flex;justify-content:space-between;align-items:center;gap:9px;padding:10px 3px;border-bottom:1px solid #e1ebed;min-width:0}
+.apc-quick-linked>div{min-width:0;display:grid;gap:4px}
+.apc-quick-linked b{font-size:14px;color:#173b59;overflow-wrap:anywhere}
+.apc-quick-linked small{font-size:12px;color:#627e90;overflow-wrap:anywhere}
+.apc-quick-linked .button{flex:0 0 auto}
+.apc-linked-collapsible,.apc-nfc-records{margin:13px 0!important;padding:0 14px!important}
+.apc-nfc-qr-note{border:1px solid #cde9de;background:#ecf9f3;color:#176a4b;padding:12px 14px;border-radius:12px;font-size:13px;line-height:1.5}
+.apc-edit-nfc-action{width:100%;min-height:50px}
+.apc-manage-page .inventory-group>summary{cursor:pointer}
+.apc-print-tools{max-width:890px;margin:0 auto;width:100%}
+@media(max-width:700px){
+ .apc-manage-page{gap:10px!important}
+ .apc-manage-intro{padding:0 2px}
+ .apc-manage-intro h2{font-size:23px}
+ .apc-manage-intro p{font-size:13px}
+ .apc-manage-tabs{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .apc-manage-tab{min-height:57px!important;font-size:14px!important;line-height:1.2}
+ .apc-manage-section{padding:15px!important}
+ .apc-quick-step{padding:12px;gap:8px;margin-top:8px}
+ .apc-quick-title{font-size:16px}
+ .apc-quick-step select{font-size:16px}
+ .apc-nfc-main-save{font-size:16px!important}
+ .apc-manage-page .manage-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+ .apc-manage-page .manage-actions .button{min-width:0;font-size:13px;min-height:46px;padding:7px}
+ .apc-manage-page .manage-actions .button.danger{grid-column:span 2}
+ .apc-manage-page .form-card{padding:10px}
+ .apc-manage-page .apc-nfc-quick .nfc-alert{font-size:13px}
+}
