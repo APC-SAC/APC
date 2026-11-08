@@ -1,6 +1,6 @@
 {
-  "web_version": "19.0.0",
+  "web_version": "20.0.0",
   "android_version": "1.3.0",
   "apk_url": "https://github.com/APC-SAC/APC/releases/latest/download/APC-Inventario.apk",
-  "release_notes": "Web V19: asignación de stickers NFC por UID, lector NFC desde Inicio y aviso para chips desconocidos. Los QR existentes se conservan. La lectura NFC nativa requiere APK Android 1.4.0."
+  "release_notes": "Web V20: QR siempre disponible; chip NFC opcional al crear o editar recipientes. Permite asociar y retirar stickers sin cambiar QR ni stock."
 }
