@@ -1,6 +1,6 @@
 {
-  "web_version": "17.0.0",
+  "web_version": "18.0.0",
   "android_version": "1.3.0",
   "apk_url": "https://github.com/APC-SAC/APC/releases/latest/download/APC-Inventario.apk",
-  "release_notes": "Web V17: edición de nombre y grupo; fotos de referencia compartidas; grabación de chips NFC mediante Chrome Android, sin renovar QR."
+  "release_notes": "Web V18: corrección de edición de nombre, grupo, descripción y fotografía. El formulario ya no se cierra al tocar sus campos. Sin cambios de SQL ni QR."
 }

@@ -16,7 +16,7 @@ const CACHE_KEY = 'apc_inventory_stock_v7';
 const CONTAINERS_CACHE_KEY = 'apc_inventory_containers_v7';
 const QUEUE_KEY = 'apc_inventory_pending_v7';
 const MAX_QTY = 100000;
-const WEB_VERSION = '17.0.0';
+const WEB_VERSION = '18.0.0';
 const UPDATE_URL = `${BASE}version.json`;
 
 const DB_KEYS = ['taper_rey', 'taper_gyg', 'tapas', 'tenedores'];
@@ -561,7 +561,7 @@ function renderEditModal() {
   const container = getContainer(state.editContainerId);
   if (!container) return '';
   const photo = state.editPhotoData === null ? containerPhoto(container) : state.editPhotoData;
-  return `<div class="edit-modal-backdrop" data-action="cancel-edit"><section class="edit-modal" role="dialog" aria-modal="true" aria-label="Editar recipiente" data-stop-close="true">
+  return `<div class="edit-modal-backdrop"><section class="edit-modal" role="dialog" aria-modal="true" aria-label="Editar recipiente" data-stop-close="true">
     <header class="edit-modal-header"><div><span class="eyebrow">PERSONALIZAR RECIPIENTE</span><h2>Editar ${escapeHtml(container.name)}</h2><p>Tu QR y sus cantidades no cambiarán.</p></div><button type="button" class="icon-button" data-action="cancel-edit" aria-label="Cerrar">×</button></header>
     <div class="edit-modal-body">
       <label class="form-field"><span>Nombre del recipiente</span><input type="text" data-state-field="editName" maxlength="70" value="${escapeHtml(state.editName)}" placeholder="Ej. Tacho de tapas"></label>
@@ -1220,6 +1220,7 @@ window.addEventListener('popstate', event => {
 });
 // Back de Android puede llamar esto en futuras APK. En la web también usamos el historial real.
 window.APCHandleBack = () => {
+  if (state.editContainerId) { state.editContainerId=''; state.editPhotoData=null; render(); return true; }
   if (state.contentEditOpen) { closeContentEditor(); return true; }
   if (state.clearHistoryOpen) { state.clearHistoryOpen=false; render(); return true; }
   if (state.productDetailKey) { state.productDetailKey=''; render(); return true; }
@@ -1285,7 +1286,7 @@ ROOT.addEventListener('click', async event => {
     state.editKeys = meta.hasMeta ? [...meta.keys] : [...visibleKeys(container)];
     render(); return;
   }
-  if (action === 'cancel-edit') { document.activeElement?.blur?.(); if(event.target.closest('.edit-modal') && !event.target.closest('[data-action="cancel-edit"]')) return; state.editContainerId = ''; state.editPhotoData = null; render(); return; }
+  if (action === 'cancel-edit') { document.activeElement?.blur?.(); state.editContainerId = ''; state.editPhotoData = null; render(); return; }
   if (action === 'save-edit') { document.activeElement?.blur?.(); await saveContainerEdit(id); return; }
   if (action === 'remove-edit-photo') { state.editPhotoData = ''; render(); return; }
   if (action === 'clear-create-photo') { state.createPhotoData = null; render(); return; }
